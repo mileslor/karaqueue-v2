@@ -22,6 +22,7 @@ const io = new Server(httpServer, { cors: { origin: '*' } });
 app.use(express.static(join(__dirname, 'public')));
 app.use(express.json());
 
+app.get('/api/ping', (_req, res) => res.json({ app: 'karaqueue', version: '2' }));
 app.get('/tv', (_req, res) => res.sendFile(join(__dirname, 'public', 'tv.html')));
 app.get('/settings', (_req, res) => res.sendFile(join(__dirname, 'public', 'settings.html')));
 app.get('/remote', (_req, res) => res.sendFile(join(__dirname, 'public', 'remote.html')));
