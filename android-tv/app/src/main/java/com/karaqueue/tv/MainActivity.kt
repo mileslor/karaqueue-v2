@@ -79,7 +79,7 @@ class MainActivity : AppCompatActivity() {
         }
         val input = EditText(this).apply {
             hint = "http://192.168.1.xx:3000"
-            if (saved.isNotEmpty()) setText(saved)
+            setText(if (saved.isNotEmpty()) saved else "http://192.168.1.74:3000")
         }
         layout.addView(label)
         layout.addView(input)
