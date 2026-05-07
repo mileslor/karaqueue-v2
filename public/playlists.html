@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KaraQueue 歌單管理</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --bg: #0f0f1a; --panel: rgba(255,255,255,0.06); --border: rgba(255,255,255,0.1); --accent: #e94560; --accent2: #7c3aed; --text: #f0f0f0; --muted: #888; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .topbar h1 { font-size: 16px; font-weight: 700; }
+  .topbar h1 span { color: var(--accent); }
+  .topbar a { color: var(--muted); text-decoration: none; font-size: 13px; }
+  .topbar a:hover { color: var(--text); }
+  .topbar .sep { color: var(--border); }
+
+  .layout { display: grid; grid-template-columns: 280px 1fr; flex: 1; overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .sidebar-header { padding: 14px 14px 10px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+  .sidebar-header h2 { font-size: 14px; color: var(--muted); font-weight: 600; }
+  .new-btn { padding: 6px 14px; border: none; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; font-size: 12px; font-weight: 600; }
+  .pl-list { flex: 1; overflow-y: auto; padding: 0 10px 10px; display: flex; flex-direction: column; gap: 4px; }
+  .pl-item { padding: 10px 12px; border-radius: 8px; background: var(--panel); border: 1px solid transparent; cursor: pointer; transition: all .15s; }
+  .pl-item:hover { border-color: var(--border); }
+  .pl-item.active { border-color: var(--accent); background: rgba(233,69,96,0.12); }
+  .pl-item-name { font-size: 13px; font-weight: 500; }
+  .pl-item-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .pl-item-actions { display: flex; gap: 4px; margin-top: 8px; }
+  .pl-act { padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: none; color: var(--muted); cursor: pointer; font-size: 11px; }
+  .pl-act:hover { color: var(--text); border-color: var(--text); }
+  .pl-act.load { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+  .pl-act.load:hover { opacity: .85; }
+  .pl-act.del:hover { border-color: var(--accent); color: var(--accent); }
+  .pl-empty { text-align: center; color: var(--muted); font-size: 12px; padding: 30px 10px; }
+
+  /* Editor */
+  .editor { display: flex; flex-direction: column; overflow: hidden; }
+  .editor-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; }
+
+  .editor-header { padding: 14px 18px 10px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+  .editor-header input { flex: 1; padding: 9px 14px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.08); color: var(--text); font-size: 15px; font-weight: 600; outline: none; }
+  .editor-header input:focus { border-color: var(--accent); }
+  .hdr-btn { padding: 9px 16px; border: none; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .hdr-btn.save { background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+  .hdr-btn.save:hover { border-color: var(--accent2); }
+  .hdr-btn.load { background: var(--accent); color: #fff; }
+  .hdr-btn.load:hover { opacity: .85; }
+
+  .editor-body { display: grid; grid-template-columns: 1fr 1fr; flex: 1; overflow: hidden; gap: 0; }
+
+  /* Add songs panel */
+  .add-panel { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .add-panel-header { padding: 10px 14px 8px; font-size: 12px; color: var(--muted); font-weight: 600; flex-shrink: 0; }
+  .search-row { padding: 0 14px 10px; display: flex; gap: 8px; flex-shrink: 0; }
+  .search-row input { flex: 1; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.07); color: var(--text); font-size: 13px; outline: none; }
+  .search-row input:focus { border-color: var(--accent); }
+  .search-row button { padding: 9px 16px; border: none; border-radius: 10px; background: var(--accent); color: #fff; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .import-hint { padding: 0 14px 8px; font-size: 11px; color: var(--muted); flex-shrink: 0; }
+  #add-results { flex: 1; overflow-y: auto; padding: 0 14px 10px; display: flex; flex-direction: column; gap: 6px; }
+
+  /* Song list panel */
+  .songs-panel { display: flex; flex-direction: column; overflow: hidden; }
+  .songs-panel-header { padding: 10px 14px 8px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+  .songs-panel-header span { font-size: 12px; color: var(--muted); font-weight: 600; }
+  #song-list { flex: 1; overflow-y: auto; padding: 0 14px 10px; display: flex; flex-direction: column; gap: 5px; }
+
+  /* Result / song items */
+  .result-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; background: var(--panel); border: 1px solid transparent; }
+  .result-item img { width: 64px; height: 36px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+  .result-info { flex: 1; min-width: 0; }
+  .result-title { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .result-author { font-size: 10px; color: var(--muted); }
+  .add-btn { flex-shrink: 0; padding: 4px 10px; border: none; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; font-size: 12px; font-weight: 600; }
+  .add-btn.added { background: #2ecc71; }
+
+  .song-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: var(--panel); }
+  .song-num { font-size: 11px; color: var(--muted); width: 18px; text-align: center; flex-shrink: 0; }
+  .song-item img { width: 52px; height: 29px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+  .song-info { flex: 1; min-width: 0; }
+  .song-title { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .song-author { font-size: 10px; color: var(--muted); }
+  .song-add { padding: 3px 8px; border: none; border-radius: 4px; background: var(--accent2); color: #fff; cursor: pointer; font-size: 11px; flex-shrink: 0; }
+  .song-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; flex-shrink: 0; padding: 0 4px; }
+  .song-del:hover { color: var(--accent); }
+
+  .import-bar { padding: 0 14px 10px; flex-shrink: 0; }
+  .import-bar button { width: 100%; padding: 8px; border: 1px dashed var(--border); border-radius: 8px; background: none; color: var(--muted); cursor: pointer; font-size: 12px; }
+  .import-bar button:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #2ecc71; color: #fff; padding: 10px 22px; border-radius: 20px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 99; }
+  .toast.show { opacity: 1; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+
+  @media (max-width: 700px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .editor-body { grid-template-columns: 1fr; }
+    .add-panel { border-right: none; border-bottom: 1px solid var(--border); max-height: 50vh; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Kara<span>Queue</span> 🎤</h1>
+  <span class="sep">|</span>
+  <span style="font-size:14px;font-weight:600">歌單管理</span>
+  <div style="flex:1"></div>
+  <a href="/">← 返回控制台</a>
+</div>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>所有歌單</h2>
+      <button class="new-btn" onclick="createNew()">+ 新增</button>
+    </div>
+    <div class="pl-list" id="pl-list">
+      <div class="pl-empty">載入中...</div>
+    </div>
+  </div>
+
+  <!-- Editor -->
+  <div class="editor" id="editor">
+    <div class="editor-empty" id="editor-empty">← 選擇或新增歌單開始編輯</div>
+
+    <div id="editor-main" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+      <div class="editor-header">
+        <input id="editor-name" type="text" placeholder="歌單名稱..." />
+        <button class="hdr-btn save" onclick="savePl()">💾 儲存</button>
+        <button class="hdr-btn load" onclick="loadToQueue()">▶ 載入隊列</button>
+      </div>
+
+      <div class="editor-body">
+        <!-- Add songs -->
+        <div class="add-panel">
+          <div class="add-panel-header">搜尋 / 新增歌曲</div>
+          <div class="search-row">
+            <input id="add-input" type="text" placeholder="歌名、歌手、YouTube 連結或播放清單..." onkeydown="if(event.key==='Enter')doAddSearch()" />
+            <button onclick="doAddSearch()">搜</button>
+          </div>
+          <div class="import-hint">支援：一般搜尋 · YouTube 影片連結 · YouTube 播放清單連結</div>
+          <div id="add-results"></div>
+        </div>
+
+        <!-- Song list -->
+        <div class="songs-panel">
+          <div class="songs-panel-header">
+            <span id="songs-count">歌單內容</span>
+            <button onclick="addAllToQueue()" style="padding:4px 10px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;font-size:11px">全加隊列</button>
+          </div>
+          <div id="song-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+let currentPlName = null;
+let currentSongs = [];
+
+// Load playlist list
+async function loadPlList() {
+  const res = await fetch('/api/playlists');
+  const names = await res.json();
+  const c = document.getElementById('pl-list');
+  if (!names.length) { c.innerHTML = '<div class="pl-empty">尚未有歌單，按「新增」建立</div>'; return; }
+  c.innerHTML = names.map(n => `
+    <div class="pl-item" id="plitem-${CSS.escape(n)}" onclick="openPl('${esc(n)}')">
+      <div class="pl-item-name">${esc(n)}</div>
+      <div class="pl-item-meta" id="meta-${esc(n)}">載入中...</div>
+      <div class="pl-item-actions" onclick="event.stopPropagation()">
+        <button class="pl-act load" onclick="quickLoad('${esc(n)}')">▶ 載入</button>
+        <button class="pl-act del" onclick="deletePl('${esc(n)}')">🗑</button>
+      </div>
+    </div>
+  `).join('');
+  // Load song counts
+  names.forEach(async n => {
+    try {
+      const songs = await (await fetch(`/api/playlists/${encodeURIComponent(n)}`)).json();
+      const el = document.getElementById(`meta-${esc(n)}`);
+      if (el) el.textContent = `${songs.length} 首歌`;
+    } catch {}
+  });
+}
+loadPlList();
+
+function createNew() {
+  currentPlName = '';
+  currentSongs = [];
+  document.getElementById('editor-name').value = '';
+  document.getElementById('add-input').value = '';
+  document.getElementById('add-results').innerHTML = '';
+  renderSongs();
+  showEditor();
+  document.querySelectorAll('.pl-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('editor-name').focus();
+}
+
+async function openPl(name) {
+  currentPlName = name;
+  document.getElementById('editor-name').value = name;
+  document.getElementById('add-input').value = '';
+  document.getElementById('add-results').innerHTML = '';
+  try {
+    currentSongs = await (await fetch(`/api/playlists/${encodeURIComponent(name)}`)).json();
+  } catch { currentSongs = []; }
+  renderSongs();
+  showEditor();
+  document.querySelectorAll('.pl-item').forEach(el => el.classList.remove('active'));
+  const item = document.getElementById(`plitem-${CSS.escape(name)}`);
+  if (item) item.classList.add('active');
+}
+
+function showEditor() {
+  document.getElementById('editor-empty').style.display = 'none';
+  document.getElementById('editor-main').style.display = 'flex';
+}
+
+function renderSongs() {
+  const c = document.getElementById('song-list');
+  document.getElementById('songs-count').textContent = `歌單共 ${currentSongs.length} 首`;
+  if (!currentSongs.length) {
+    c.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">歌單係空嘅，左邊搜尋加歌</div>';
+    return;
+  }
+  c.innerHTML = currentSongs.map((s, i) => `
+    <div class="song-item">
+      <span class="song-num">${i+1}</span>
+      <img src="${s.thumbnail||`https://i.ytimg.com/vi/${s.videoId}/mqdefault.jpg`}" onerror="this.src='https://i.ytimg.com/vi/${s.videoId}/mqdefault.jpg'" />
+      <div class="song-info">
+        <div class="song-title">${esc(s.title)}</div>
+        <div class="song-author">${esc(s.author||'')}</div>
+      </div>
+      <button class="song-add" onclick="addOneToQueue(${i})" title="加入隊列">+隊</button>
+      <button class="song-del" onclick="removeSong(${i})">×</button>
+    </div>
+  `).join('');
+}
+
+function removeSong(i) { currentSongs.splice(i, 1); renderSongs(); }
+
+function addOneToQueue(i) {
+  socket.emit('add', { ...currentSongs[i], addedBy: 'Playlist' });
+  showToast(`已加入：${currentSongs[i].title.slice(0,20)}`);
+}
+
+function addAllToQueue() {
+  if (!currentSongs.length) return;
+  socket.emit('clear');
+  setTimeout(() => currentSongs.forEach(s => socket.emit('add', { ...s, addedBy: 'Playlist' })), 100);
+  showToast(`已載入 ${currentSongs.length} 首歌至隊列`);
+}
+
+function loadToQueue() { addAllToQueue(); }
+
+async function savePl() {
+  const name = document.getElementById('editor-name').value.trim();
+  if (!name) { alert('請輸入歌單名稱'); return; }
+  await fetch(`/api/playlists/${encodeURIComponent(name)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(currentSongs)
+  });
+  currentPlName = name;
+  showToast(`歌單「${name}」已儲存！`);
+  loadPlList();
+}
+
+async function quickLoad(name) {
+  const songs = await (await fetch(`/api/playlists/${encodeURIComponent(name)}`)).json();
+  socket.emit('clear');
+  setTimeout(() => songs.forEach(s => socket.emit('add', { ...s, addedBy: 'Playlist' })), 100);
+  showToast(`已載入歌單「${name}」`);
+}
+
+async function deletePl(name) {
+  if (!confirm(`刪除歌單「${name}」？`)) return;
+  await fetch(`/api/playlists/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  if (currentPlName === name) {
+    currentPlName = null;
+    currentSongs = [];
+    document.getElementById('editor-empty').style.display = 'flex';
+    document.getElementById('editor-main').style.display = 'none';
+  }
+  loadPlList();
+}
+
+// Search / Add songs
+function extractYouTubeId(text) {
+  const m = text.match(/(?:youtube\.com\/watch\?(?:.*&)?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+function extractPlaylistId(text) {
+  const m = text.match(/[?&]list=([A-Za-z0-9_-]{10,60})/);
+  return m ? m[1] : null;
+}
+
+async function doAddSearch() {
+  const q = document.getElementById('add-input').value.trim();
+  if (!q) return;
+  const c = document.getElementById('add-results');
+  c.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">搜尋中...</div>';
+
+  // Check YouTube playlist URL
+  const plId = extractPlaylistId(q);
+  if (plId) {
+    try {
+      const res = await fetch(`/api/ytplaylist/${plId}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      // Show import option
+      c.innerHTML = `
+        <div style="background:var(--panel);border-radius:10px;padding:12px;border:1px solid var(--accent2)">
+          <div style="font-size:12px;font-weight:600;margin-bottom:6px">📋 ${esc(data.title)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">${data.videos.length} 首歌</div>
+          <div style="display:flex;gap:8px">
+            <button onclick="importYTPlaylist()" style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--accent2);color:#fff;cursor:pointer;font-size:12px;font-weight:600">全部加入歌單</button>
+            <button onclick="appendYTPlaylistToQueue()" style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-size:12px;font-weight:600">直接加入隊列</button>
+          </div>
+        </div>
+      `;
+      window._ytPlImport = data.videos;
+      return;
+    } catch (e) {
+      c.innerHTML = `<div style="color:var(--accent);font-size:11px;padding:8px">${e.message || '無法載入播放清單'}</div>`;
+      return;
+    }
+  }
+
+  // Check YouTube video URL
+  const ytId = extractYouTubeId(q);
+  if (ytId) {
+    try {
+      const v = await (await fetch(`/api/video/${ytId}`)).json();
+      renderAddResults([v]);
+    } catch { c.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">找不到影片</div>'; }
+    return;
+  }
+
+  // Regular search
+  try {
+    const results = await (await fetch(`/api/search?q=${encodeURIComponent(q)}&page=1`)).json();
+    renderAddResults(results);
+  } catch { c.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">搜尋失敗</div>'; }
+}
+
+function renderAddResults(results) {
+  const c = document.getElementById('add-results');
+  if (!results.length) { c.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">冇結果</div>'; return; }
+  c.innerHTML = '';
+  results.forEach(v => {
+    const div = document.createElement('div');
+    div.className = 'result-item';
+    div.innerHTML = `
+      <img src="${v.thumbnail}" onerror="this.src='https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg'" />
+      <div class="result-info">
+        <div class="result-title">${esc(v.title)}</div>
+        <div class="result-author">${esc(v.author||'')}</div>
+      </div>
+      <button class="add-btn" onclick='addToCurrentPl(${JSON.stringify(JSON.stringify(v))},this)'>+</button>
+    `;
+    c.appendChild(div);
+  });
+}
+
+function addToCurrentPl(jsonStr, btn) {
+  const v = JSON.parse(jsonStr);
+  currentSongs.push({ ...v, addedBy: 'Playlist' });
+  renderSongs();
+  btn.textContent = '✓'; btn.classList.add('added');
+  setTimeout(() => { btn.textContent = '+'; btn.classList.remove('added'); }, 1500);
+}
+
+function importYTPlaylist() {
+  if (!window._ytPlImport) return;
+  const vids = window._ytPlImport.map(v => ({ ...v, addedBy: 'Playlist' }));
+  currentSongs.push(...vids);
+  renderSongs();
+  showToast(`已加入 ${vids.length} 首歌至歌單`);
+  document.getElementById('add-results').innerHTML = '';
+  document.getElementById('add-input').value = '';
+  window._ytPlImport = null;
+}
+
+function appendYTPlaylistToQueue() {
+  if (!window._ytPlImport) return;
+  window._ytPlImport.forEach(v => socket.emit('add', { ...v, addedBy: 'Playlist' }));
+  showToast(`已加入 ${window._ytPlImport.length} 首歌至隊列`);
+  document.getElementById('add-results').innerHTML = '';
+  document.getElementById('add-input').value = '';
+  window._ytPlImport = null;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+</script>
+</body>
+</html>

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KaraQueue 設定 ⚙️</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f0f1a; --panel: rgba(255,255,255,0.06); --border: rgba(255,255,255,0.1);
+    --accent: #e94560; --accent2: #7c3aed; --text: #f0f0f0; --muted: #888;
+  }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+  .logo { font-size: 18px; font-weight: 700; }
+  .logo span { color: var(--accent); }
+  .back-btn { padding: 7px 14px; border: 1px solid var(--border); border-radius: 8px; background: none; color: var(--muted); cursor: pointer; font-size: 13px; text-decoration: none; transition: all .15s; }
+  .back-btn:hover { color: var(--text); border-color: var(--text); }
+  .page-title { font-size: 15px; font-weight: 600; margin-left: 4px; }
+
+  .content { flex: 1; padding: 28px 20px; max-width: 520px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .card-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 13px; color: var(--text); }
+  .field .hint { font-size: 11px; color: var(--muted); }
+  .field input[type="password"],
+  .field input[type="text"] {
+    padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px;
+    background: rgba(255,255,255,0.08); color: var(--text); font-size: 14px;
+    font-family: monospace; outline: none; width: 100%;
+  }
+  .field input:focus { border-color: var(--accent); }
+
+  .input-row { display: flex; gap: 8px; }
+  .input-row input { flex: 1; }
+
+  .btn { padding: 10px 18px; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all .15s; white-space: nowrap; }
+  .btn-accent { background: var(--accent); color: #fff; }
+  .btn-accent:hover { opacity: .85; }
+  .btn-secondary { background: rgba(255,255,255,0.1); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: rgba(255,255,255,0.16); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  .status-tag { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .status-tag.ok { background: rgba(72,199,142,0.18); color: #48c78e; border: 1px solid rgba(72,199,142,0.4); }
+  .status-tag.err { background: rgba(233,69,96,0.18); color: var(--accent); border: 1px solid rgba(233,69,96,0.4); }
+  .status-tag.none { background: rgba(255,255,255,0.06); color: var(--muted); border: 1px solid var(--border); }
+
+  .test-result { font-size: 12px; padding: 8px 12px; border-radius: 8px; display: none; }
+  .test-result.ok { background: rgba(72,199,142,0.15); color: #48c78e; border: 1px solid rgba(72,199,142,0.3); }
+  .test-result.err { background: rgba(233,69,96,0.12); color: #ff8099; border: 1px solid rgba(233,69,96,0.3); }
+
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .toggle-label { display: flex; flex-direction: column; gap: 3px; }
+  .toggle-label span { font-size: 13px; }
+  .toggle-label small { font-size: 11px; color: var(--muted); }
+
+  .toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle .slider { position: absolute; inset: 0; background: rgba(255,255,255,0.15); border-radius: 24px; cursor: pointer; transition: .2s; }
+  .toggle .slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+  .toggle input:checked + .slider { background: var(--accent); }
+  .toggle input:checked + .slider::before { transform: translateX(20px); }
+
+  .save-row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+  .save-msg { font-size: 12px; color: #48c78e; display: none; align-items: center; gap: 5px; }
+  .save-msg.show { display: flex; }
+
+  .db-info { font-size: 12px; color: var(--muted); padding: 8px 0; line-height: 1.6; }
+  .db-info code { color: var(--accent); font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="back-btn">← 返回</a>
+  <div class="logo">Kara<span>Queue</span></div>
+  <div class="page-title">⚙️ 設定</div>
+</div>
+
+<div class="content">
+
+  <!-- AI API -->
+  <div class="card">
+    <div class="card-title">AI 分類 API</div>
+
+    <div class="field">
+      <label>AI 服務商</label>
+      <select id="provider-select" onchange="onProviderChange()" style="padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:#1a1a2e;color:var(--text);font-size:14px;outline:none;width:100%">
+        <option value="minimax">MiniMax（推薦，Token 較平）</option>
+        <option value="openai">OpenAI（GPT-4o mini）</option>
+        <option value="gemini">Google Gemini（有免費配額）</option>
+        <option value="claude">Anthropic Claude（Haiku）</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <label>API Key</label>
+        <span id="key-status" class="status-tag none">未設定</span>
+      </div>
+      <div class="input-row">
+        <input type="password" id="api-key-input" placeholder="sk-..." autocomplete="off" />
+        <button class="btn btn-secondary" id="test-btn" onclick="testKey()">測試</button>
+      </div>
+      <div class="hint" id="key-hint">只需輸入新 Key 才需要填寫；留空則保留現有 Key</div>
+      <div id="test-result" class="test-result"></div>
+    </div>
+  </div>
+
+  <!-- 自動收錄 -->
+  <div class="card">
+    <div class="card-title">自動收錄</div>
+
+    <div class="toggle-row">
+      <div class="toggle-label">
+        <span>🎵 播放 2 分鐘後自動收錄歌庫</span>
+        <small>需要 API Key 才能運作；首次播放先分類，之後再播唔會重複</small>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="auto-classify-toggle" onchange="onToggleChange()" />
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <!-- 歌庫資料 -->
+  <div class="card">
+    <div class="card-title">歌庫資料</div>
+    <div class="db-info" id="db-info">載入中…</div>
+  </div>
+
+  <!-- 儲存 -->
+  <div class="save-row">
+    <span class="save-msg" id="save-msg">✓ 已儲存</span>
+    <button class="btn btn-secondary" onclick="location.href='/'">取消</button>
+    <button class="btn btn-accent" id="save-btn" onclick="saveSettings()">儲存設定</button>
+  </div>
+
+</div>
+
+<script>
+const PROVIDER_HINTS = {
+  minimax: { placeholder: 'sk-cp-xxxxxxxxxxxx', hint: '前往 api.minimaxi.com 取得 Key' },
+  openai:  { placeholder: 'sk-xxxxxxxxxxxx', hint: '前往 platform.openai.com 取得 Key（GPT-4o mini）' },
+  gemini:  { placeholder: 'AIzaSyxxxxxxxx', hint: '前往 aistudio.google.com 取得 Key（有免費配額）' },
+  claude:  { placeholder: 'sk-ant-xxxxxxxxxxxx', hint: '前往 console.anthropic.com 取得 Key（Haiku）' },
+};
+
+function onProviderChange() {
+  const p = document.getElementById('provider-select').value;
+  const info = PROVIDER_HINTS[p] || PROVIDER_HINTS.minimax;
+  document.getElementById('api-key-input').placeholder = info.placeholder;
+  document.getElementById('key-hint').textContent = info.hint + '；留空則保留現有 Key';
+  document.getElementById('key-status').textContent = '未確認';
+  document.getElementById('key-status').className = 'status-tag none';
+  document.getElementById('test-result').style.display = 'none';
+  hideSaveMsg();
+}
+
+async function loadSettings() {
+  try {
+    const d = await fetch('/api/settings').then(r => r.json());
+
+    const sel = document.getElementById('provider-select');
+    if (d.provider) sel.value = d.provider;
+    onProviderChange();
+
+    const keyStatus = document.getElementById('key-status');
+    if (d.hasApiKey) {
+      keyStatus.textContent = '已設定 ✓';
+      keyStatus.className = 'status-tag ok';
+    } else {
+      keyStatus.textContent = '未設定';
+      keyStatus.className = 'status-tag none';
+    }
+
+    document.getElementById('auto-classify-toggle').checked = !!d.autoClassify;
+
+    const dbInfo = document.getElementById('db-info');
+    if (d.songsDbPath) {
+      try {
+        const catalog = await fetch('/api/catalog').then(r => r.json());
+        const total = catalog.length;
+        const singers = new Set(catalog.map(s => s.singer)).size;
+        dbInfo.innerHTML = `共 <strong>${total}</strong> 首歌，<strong>${singers}</strong> 位歌手<br><code>${d.songsDbPath}</code>`;
+      } catch {
+        dbInfo.innerHTML = `歌庫路徑：<code>${d.songsDbPath}</code>`;
+      }
+    } else {
+      dbInfo.textContent = '未找到歌庫路徑';
+    }
+  } catch (e) { console.error(e); }
+}
+
+async function testKey() {
+  const input = document.getElementById('api-key-input').value.trim();
+  const provider = document.getElementById('provider-select').value;
+  const btn = document.getElementById('test-btn');
+  const result = document.getElementById('test-result');
+  btn.disabled = true; btn.textContent = '測試中…';
+  result.style.display = 'none';
+  try {
+    const body = { provider };
+    if (input) body.apiKey = input;
+    const d = await fetch('/api/settings/test-key', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(r => r.json());
+    result.textContent = d.msg;
+    result.className = 'test-result ' + (d.ok ? 'ok' : 'err');
+    result.style.display = 'block';
+  } catch (e) {
+    result.textContent = '連線失敗';
+    result.className = 'test-result err';
+    result.style.display = 'block';
+  }
+  btn.disabled = false; btn.textContent = '測試';
+}
+
+function onToggleChange() { hideSaveMsg(); }
+function hideSaveMsg() { document.getElementById('save-msg').classList.remove('show'); }
+
+async function saveSettings() {
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true; btn.textContent = '儲存中…';
+  const apiKey = document.getElementById('api-key-input').value.trim();
+  const provider = document.getElementById('provider-select').value;
+  const autoClassify = document.getElementById('auto-classify-toggle').checked;
+  const body = { autoClassify, provider };
+  if (apiKey) body.apiKey = apiKey;
+  try {
+    await fetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (apiKey) document.getElementById('api-key-input').value = '';
+    await loadSettings();
+    const msg = document.getElementById('save-msg');
+    msg.classList.add('show');
+    setTimeout(() => msg.classList.remove('show'), 3000);
+  } catch (e) { alert('儲存失敗：' + e.message); }
+  btn.disabled = false; btn.textContent = '儲存設定';
+}
+
+loadSettings();
+</script>
+</body>
+</html>

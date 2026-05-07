@@ -1,0 +1,8 @@
+node_modules/
+.env
+songs-db.json
+playlists/
+android-tv/app/build/
+android-tv/.gradle/
+android-tv/local.properties
+*.log
