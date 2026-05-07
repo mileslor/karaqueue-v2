@@ -7,3 +7,4 @@ android-tv/.gradle/
 android-tv/local.properties
 *.log
 .DS_Store
+releases/
