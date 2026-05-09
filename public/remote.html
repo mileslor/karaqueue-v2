@@ -59,12 +59,46 @@
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
   .vp-toggle { padding: 5px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; -webkit-tap-highlight-color: transparent; }
   .vp-toggle.desktop { border-color: #64b5f6; }
+  /* Room switcher */
+  .room-sw { position: relative; }
+  .room-pill { display: flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 16px; border: 1.5px solid var(--rc,var(--accent)); background: color-mix(in srgb,var(--rc,var(--accent)) 18%,transparent); cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap; transition: background .15s; }
+  .room-pill .rdot { width: 7px; height: 7px; border-radius: 50%; background: var(--rc,var(--accent)); flex-shrink: 0; }
+  .room-dd { position: fixed; top: 56px; left: 10px; right: 10px; background: #1a1a2e; border: 1px solid var(--border); border-radius: 14px; padding: 8px; z-index: 500; display: none; box-shadow: 0 8px 32px rgba(0,0,0,.5); max-height: 70vh; overflow-y: auto; }
+  .room-dd.open { display: block; }
+  .room-opt { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 9px; cursor: pointer; font-size: 13px; transition: background .12s; }
+  .room-opt:hover { background: rgba(255,255,255,.08); }
+  .room-opt.active { background: rgba(255,255,255,.12); font-weight: 600; }
+  .room-opt .rodot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .room-new-area { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; }
+  .room-clr-row { display: flex; gap: 5px; margin-bottom: 6px; }
+  .rclr { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; flex-shrink: 0; }
+  .rclr.sel { border-color: #fff; }
+  .room-new-row { display: flex; gap: 6px; }
+  .room-new-inp { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: rgba(255,255,255,.05); color: var(--text); font-size: 13px; outline: none; min-width: 0; }
+  .room-new-inp:focus { border-color: var(--accent); }
+  .room-new-btn { padding: 8px 12px; border: none; border-radius: 8px; background: var(--accent); color: #fff; font-size: 13px; cursor: pointer; white-space: nowrap; }
 </style>
 </head>
 <body>
 
 <div class="header">
   <h1>Kara<span>Queue</span> 🎤</h1>
+  <div class="room-sw" id="room-sw">
+    <div class="room-pill" id="room-pill" onclick="toggleRoomDD(event)">
+      <span class="rdot" id="room-dot"></span>
+      <span id="room-name-label">預設</span>▾
+    </div>
+    <div class="room-dd" id="room-dd">
+      <div class="room-list" id="room-list"></div>
+      <div class="room-new-area">
+        <div class="room-clr-row" id="room-clr-row"></div>
+        <div class="room-new-row">
+          <input class="room-new-inp" id="room-new-inp" placeholder="新房間名稱" onkeydown="if(event.key==='Enter')createNewRoom()" />
+          <button class="room-new-btn" onclick="createNewRoom()">＋</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <button class="vp-toggle" id="vp-btn" onclick="toggleViewport()" title="切換桌面/手機版">📱</button>
   <input class="nick-input" id="nickname" type="text" placeholder="你嘅名" maxlength="12" />
 </div>
@@ -116,6 +150,8 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
+const _roomId = new URLSearchParams(location.search).get('room') || 'default';
+socket.on('connect', () => socket.emit('join-room', { roomId: _roomId }));
 let queue = [], currentIndex = -1;
 
 const nick = document.getElementById('nickname');
@@ -312,6 +348,109 @@ function toggleViewport() {
   location.reload();
 }
 (function(){ var m = localStorage.getItem('kq-vp') || 'mobile'; var btn = document.getElementById('vp-btn'); if(btn){ btn.textContent = m==='desktop'?'💻':'📱'; btn.classList.toggle('desktop', m==='desktop'); } })();
+
+// ── Room switcher ────────────────────────────────────────────────────
+const ROOM_PALETTE = ['#e94560','#7c3aed','#0ea5e9','#10b981','#f59e0b','#ec4899','#06b6d4','#84cc16'];
+let currentRoom = { id: 'default', name: '預設房間', color: '#e94560' };
+let allRooms = [];
+let newRoomColor = ROOM_PALETTE[1];
+let roomEditMode = false;
+
+(function initRoomColors() {
+  const row = document.getElementById('room-clr-row');
+  if (!row) return;
+  ROOM_PALETTE.forEach(c => {
+    const d = document.createElement('span');
+    d.className = 'rclr' + (c === newRoomColor ? ' sel' : '');
+    d.style.background = c;
+    d.onclick = () => { newRoomColor = c; row.querySelectorAll('.rclr').forEach(x => x.classList.remove('sel')); d.classList.add('sel'); };
+    row.appendChild(d);
+  });
+})();
+
+function updateRoomPill() {
+  const pill = document.getElementById('room-pill');
+  const dot = document.getElementById('room-dot');
+  const label = document.getElementById('room-name-label');
+  if (!pill) return;
+  pill.style.setProperty('--rc', currentRoom.color);
+  if (dot) dot.style.background = currentRoom.color;
+  if (label) label.textContent = currentRoom.name.length > 6 ? currentRoom.name.slice(0,6)+'…' : currentRoom.name;
+}
+
+async function fetchRooms() {
+  try {
+    const r = await fetch('/api/rooms');
+    allRooms = await r.json();
+    renderRoomList();
+  } catch {}
+}
+
+function renderRoomList() {
+  const list = document.getElementById('room-list');
+  if (!list) return;
+  const editBtn = `<button onclick="roomEditMode=!roomEditMode;renderRoomList()" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 8px">${roomEditMode ? '完成' : '✏️'}</button>`;
+  const header = `<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px 8px;border-bottom:1px solid var(--border);margin-bottom:4px"><span style="font-size:12px;color:var(--muted)">房間</span>${editBtn}</div>`;
+  const items = allRooms.map(r => {
+    const isActive = r.id === currentRoom.id;
+    const delBtn = (roomEditMode && r.id !== 'default')
+      ? `<button onclick="deleteRoom('${r.id}')" style="width:20px;height:20px;border-radius:50%;border:none;background:#e94560;color:#fff;cursor:pointer;font-size:13px;flex-shrink:0;padding:0;line-height:1;display:flex;align-items:center;justify-content:center">×</button>`
+      : `<span class="rodot" style="background:${r.color}"></span>`;
+    return `<div class="room-opt${isActive ? ' active' : ''}" onclick="${roomEditMode ? '' : `switchRoom('${r.id}')`}">${delBtn}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</span>${r.queueLen > 0 ? `<span style="font-size:11px;color:var(--muted)">${r.queueLen}首</span>` : ''}</div>`;
+  }).join('');
+  list.innerHTML = header + items;
+}
+
+async function deleteRoom(id) {
+  try {
+    await fetch(`/api/rooms/${id}`, { method: 'DELETE' });
+    await fetchRooms();
+    if (currentRoom.id === id) switchRoom('default');
+  } catch {}
+}
+
+function toggleRoomDD(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('room-dd');
+  const isOpen = dd.classList.toggle('open');
+  if (isOpen) fetchRooms();
+}
+
+function switchRoom(id) {
+  const r = allRooms.find(x => x.id === id);
+  if (!r) return;
+  currentRoom = r;
+  socket.emit('join-room', { roomId: id });
+  updateRoomPill();
+  renderRoomList();
+  document.getElementById('room-dd').classList.remove('open');
+}
+
+async function createNewRoom() {
+  const inp = document.getElementById('room-new-inp');
+  const name = inp.value.trim() || undefined;
+  try {
+    const res = await fetch('/api/rooms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, color: newRoomColor })
+    });
+    const room = await res.json();
+    inp.value = '';
+    await fetchRooms();
+    switchRoom(room.id);
+  } catch {}
+}
+
+socket.on('room-info', info => {
+  currentRoom = { ...currentRoom, ...info };
+  updateRoomPill();
+});
+
+document.addEventListener('click', e => {
+  const sw = document.getElementById('room-sw');
+  if (sw && !sw.contains(e.target)) document.getElementById('room-dd')?.classList.remove('open');
+});
 </script>
 </body>
 </html>

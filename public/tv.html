@@ -51,6 +51,8 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
+const _roomId = new URLSearchParams(location.search).get('room') || 'default';
+socket.on('connect', () => socket.emit('join-room', { roomId: _roomId }));
 let player = null;
 let ytReady = false;
 let playerReady = false;

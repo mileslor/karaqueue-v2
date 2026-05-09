@@ -130,6 +130,82 @@
   .singer-count { font-size: 11px; color: var(--muted); }
   .cat-back { padding: 4px 10px; border: 1px solid var(--border); border-radius: 8px; background: none; color: var(--muted); cursor: pointer; font-size: 12px; flex-shrink: 0; }
   .cat-back:hover { color: var(--text); border-color: var(--text); }
+
+  /* Playlist Manager Modal */
+  .pm-modal { background: var(--bg); border: 1px solid var(--border); border-radius: 16px; width: 92vw; max-width: 920px; height: 88vh; display: flex; flex-direction: column; overflow: hidden; }
+  .pm-topbar { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .pm-topbar h2 { font-size: 15px; font-weight: 700; }
+  .pm-topbar h2 span { color: var(--accent); }
+  .pm-close { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 22px; line-height: 1; padding: 0 4px; }
+  .pm-close:hover { color: var(--text); }
+  .pm-layout { display: grid; grid-template-columns: 260px 1fr; flex: 1; overflow: hidden; }
+  .pm-sidebar { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .pm-sidebar-hdr { padding: 12px 14px 8px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+  .pm-sidebar-hdr h3 { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .pm-pl-list { flex: 1; overflow-y: auto; padding: 0 10px 10px; display: flex; flex-direction: column; gap: 4px; }
+  .pm-pl-item { padding: 10px 12px; border-radius: 8px; background: var(--panel); border: 1px solid transparent; cursor: pointer; transition: all .15s; }
+  .pm-pl-item:hover { border-color: var(--border); }
+  .pm-pl-item.active { border-color: var(--accent); background: rgba(233,69,96,0.12); }
+  .pm-pl-name { font-size: 13px; font-weight: 500; }
+  .pm-pl-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .pm-pl-actions { display: flex; gap: 4px; margin-top: 8px; }
+  .pm-pl-act { padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: none; color: var(--muted); cursor: pointer; font-size: 11px; }
+  .pm-pl-act:hover { color: var(--text); border-color: var(--text); }
+  .pm-pl-act.load { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+  .pm-pl-act.load:hover { opacity: .85; }
+  .pm-pl-act.del:hover { border-color: var(--accent); color: var(--accent); }
+  .pm-pl-empty { text-align: center; color: var(--muted); font-size: 12px; padding: 30px 10px; }
+  .pm-editor { display: flex; flex-direction: column; overflow: hidden; }
+  .pm-editor-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; }
+  .pm-editor-hdr { padding: 12px 16px 10px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+  .pm-editor-hdr input { flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.08); color: var(--text); font-size: 14px; font-weight: 600; outline: none; }
+  .pm-editor-hdr input:focus { border-color: var(--accent); }
+  .pm-hdr-btn { padding: 8px 14px; border: none; border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .pm-hdr-btn.save { background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+  .pm-hdr-btn.save:hover { border-color: var(--accent2); }
+  .pm-hdr-btn.loadq { background: var(--accent); color: #fff; }
+  .pm-hdr-btn.loadq:hover { opacity: .85; }
+  .pm-editor-body { display: grid; grid-template-columns: 1fr 1fr; flex: 1; overflow: hidden; }
+  .pm-add-panel { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .pm-add-hdr { padding: 8px 14px 6px; font-size: 11px; color: var(--muted); font-weight: 600; flex-shrink: 0; }
+  .pm-search-row { padding: 0 12px 8px; display: flex; gap: 8px; flex-shrink: 0; }
+  .pm-search-row input { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.07); color: var(--text); font-size: 12px; outline: none; }
+  .pm-search-row input:focus { border-color: var(--accent); }
+  .pm-search-row button { padding: 8px 14px; border: none; border-radius: 10px; background: var(--accent); color: #fff; cursor: pointer; font-size: 12px; font-weight: 600; }
+  .pm-add-results { flex: 1; overflow-y: auto; padding: 0 12px 8px; display: flex; flex-direction: column; gap: 5px; }
+  .pm-songs-panel { display: flex; flex-direction: column; overflow: hidden; }
+  .pm-songs-hdr { padding: 8px 14px 6px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+  .pm-songs-hdr span { font-size: 11px; color: var(--muted); font-weight: 600; }
+  .pm-song-list { flex: 1; overflow-y: auto; padding: 0 12px 8px; display: flex; flex-direction: column; gap: 4px; }
+  .pm-pl-locked .pm-pl-name { color: var(--muted); }
+  .pm-pl-act.lock { background: none; }
+  .pm-pl-act.unlock { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .pm-lock-banner { padding: 8px 16px; background: rgba(233,69,96,0.1); border-bottom: 1px solid rgba(233,69,96,0.3); font-size: 12px; color: var(--accent); flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+  .pm-editor-body.locked { grid-template-columns: 1fr; }
+  /* Room switcher */
+  .room-sw { position: relative; flex-shrink: 0; }
+  .room-pill { display: flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 20px; border: 1.5px solid var(--rc,var(--accent)); background: color-mix(in srgb,var(--rc,var(--accent)) 18%,transparent); cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; transition: background .15s; user-select: none; }
+  .room-pill:hover { background: color-mix(in srgb,var(--rc,var(--accent)) 28%,transparent); }
+  .room-pill .rdot { width: 8px; height: 8px; border-radius: 50%; background: var(--rc,var(--accent)); flex-shrink: 0; }
+  .room-dd { position: absolute; top: calc(100% + 6px); right: 0; min-width: 220px; background: #1a1a2e; border: 1px solid var(--border); border-radius: 14px; padding: 8px; z-index: 500; display: none; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+  .room-dd.open { display: block; }
+  .room-opt { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 9px; cursor: pointer; font-size: 13px; transition: background .12s; }
+  .room-opt:hover { background: rgba(255,255,255,.08); }
+  .room-opt.active { background: rgba(255,255,255,.12); font-weight: 600; }
+  .room-opt .rodot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .room-new-row { display: flex; gap: 6px; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; }
+  .room-new-inp { flex: 1; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: rgba(255,255,255,.05); color: var(--text); font-size: 12px; outline: none; min-width: 0; }
+  .room-new-inp:focus { border-color: var(--accent); }
+  .room-clr-row { display: flex; gap: 5px; padding: 6px 0 0 0; }
+  .rclr { width: 18px; height: 18px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; flex-shrink: 0; transition: border .1s; }
+  .rclr.sel { border-color: #fff; }
+  .room-new-btn { padding: 7px 11px; border: none; border-radius: 8px; background: var(--accent); color: #fff; font-size: 12px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  /* Dropdown for add-to-playlist */
+  .atp-wrap { position: relative; flex-shrink: 0; }
+  .atp-menu { position: absolute; right: 0; top: calc(100% + 4px); background: #1e1e30; border: 1px solid var(--border); border-radius: 10px; min-width: 160px; z-index: 200; box-shadow: 0 6px 20px rgba(0,0,0,0.5); overflow: hidden; }
+  .atp-menu button { display: block; width: 100%; padding: 9px 14px; border: none; background: none; color: var(--text); cursor: pointer; font-size: 12px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .atp-menu button:hover { background: rgba(255,255,255,0.08); }
+  .atp-menu .atp-empty { padding: 10px 14px; color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
@@ -152,7 +228,24 @@
       <span id="vol-label" style="font-size:12px;color:var(--muted);width:28px">100</span>
     </span>
     <button class="ctrl-btn" id="auto-classify-btn" onclick="toggleAutoClassify()" title="自動收錄歌庫">🎵</button>
+    <button class="ctrl-btn" id="shuffle-btn" onclick="emit('toggle-shuffle')" title="隨機播放">🔀</button>
     <button class="ctrl-btn danger" onclick="confirmClear()">🗑</button>
+    <div class="room-sw" id="room-sw">
+      <div class="room-pill" id="room-pill" onclick="toggleRoomDD(event)">
+        <span class="rdot" id="room-dot"></span>
+        <span id="room-name-label">預設房間</span>▾
+      </div>
+      <div class="room-dd" id="room-dd">
+        <div class="room-list" id="room-list"></div>
+        <div style="padding:4px 0 0">
+          <div class="room-clr-row" id="room-clr-row"></div>
+          <div class="room-new-row">
+            <input class="room-new-inp" id="room-new-inp" placeholder="新房間名稱（可留空）" onkeydown="if(event.key==='Enter')createNewRoom()" />
+            <button class="room-new-btn" onclick="createNewRoom()">＋ 新增</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <a href="/settings" class="vp-toggle" title="設定" style="text-decoration:none;display:flex;align-items:center;justify-content:center">⚙️</a>
     <button class="vp-toggle" id="vp-btn" onclick="toggleViewport()" title="切換桌面/手機版">📱</button>
     <button class="vp-toggle" id="fs-btn" onclick="toggleFullscreen()" title="全螢幕">⛶</button>
@@ -191,7 +284,7 @@
     </div>
 
     <div class="playlist-bar">
-      <a href="/playlists" target="_blank" style="flex:1;padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);cursor:pointer;font-size:12px;text-align:center;text-decoration:none;display:block">📋 管理歌單</a>
+      <button onclick="openPM()" style="flex:1;padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);cursor:pointer;font-size:12px;text-align:center">📋 管理歌單</button>
       <button class="pl-btn" id="pl-load-btn">📂 快速載入</button>
     </div>
 
@@ -259,6 +352,8 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
+const _roomId = new URLSearchParams(location.search).get('room') || 'default';
+socket.on('connect', () => socket.emit('join-room', { roomId: _roomId }));
 let queue = [], currentIndex = -1;
 
 function emit(ev, data) { socket.emit(ev, data); }
@@ -269,6 +364,12 @@ socket.on('state', data => {
   if (currentIndex >= 0 && queue[currentIndex]) {
     document.getElementById('now-title').textContent = queue[currentIndex].title;
     syncVolSlider(queue[currentIndex].volume ?? 70);
+  }
+  const shuffleBtn = document.getElementById('shuffle-btn');
+  if (shuffleBtn) {
+    shuffleBtn.style.borderColor = data.shuffleMode ? 'var(--accent)' : '';
+    shuffleBtn.style.color = data.shuffleMode ? 'var(--accent)' : '';
+    shuffleBtn.title = data.shuffleMode ? '隨機播放（開啟中，點擊關閉）' : '隨機播放（關閉中，點擊開啟）';
   }
 });
 
@@ -441,6 +542,10 @@ function renderResults(results, append) {
         <div class="result-author">${esc(v.author)}</div>
       </div>
       <button class="add-btn" onclick='addVideo(${JSON.stringify(JSON.stringify(v))})'>+</button>
+      <div class="atp-wrap">
+        <button class="add-btn" style="background:var(--accent2);padding:5px 8px" onclick='atpOpen(this,${JSON.stringify(JSON.stringify(v))})' title="加入歌單">📋</button>
+        <div class="atp-menu" style="display:none"></div>
+      </div>
     `;
     c.appendChild(div);
   });
@@ -458,6 +563,48 @@ function renderResults(results, append) {
 
 function addVideo(jsonStr) {
   emit('add', { ...JSON.parse(jsonStr), addedBy: 'Host' });
+}
+
+// Add-to-playlist dropdown
+document.addEventListener('click', e => {
+  if (!e.target.closest('.atp-wrap')) {
+    document.querySelectorAll('.atp-menu').forEach(m => m.style.display = 'none');
+  }
+});
+
+async function atpOpen(btn, videoJsonStr) {
+  const menu = btn.nextElementSibling;
+  const isOpen = menu.style.display !== 'none';
+  document.querySelectorAll('.atp-menu').forEach(m => m.style.display = 'none');
+  if (isOpen) return;
+  menu.innerHTML = '<div class="atp-empty">載入中...</div>';
+  menu.style.display = 'block';
+  const playlists = await (await fetch('/api/playlists')).json();
+  const unlocked = playlists.filter(p => !p.locked);
+  if (!unlocked.length) {
+    menu.innerHTML = '<div class="atp-empty">無可用歌單（全部已鎖定）</div>';
+    return;
+  }
+  menu.innerHTML = '';
+  unlocked.forEach(p => {
+    const b = document.createElement('button');
+    b.textContent = p.name;
+    b.onclick = () => atpAddSong(p.name, videoJsonStr, btn);
+    menu.appendChild(b);
+  });
+}
+
+async function atpAddSong(plName, videoJsonStr, triggerBtn) {
+  document.querySelectorAll('.atp-menu').forEach(m => m.style.display = 'none');
+  const v = JSON.parse(videoJsonStr);
+  const res = await fetch(`/api/playlists/${encodeURIComponent(plName)}/add-song`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...v, addedBy: 'Host' })
+  });
+  if (res.ok) {
+    triggerBtn.textContent = '✓';
+    setTimeout(() => { triggerBtn.textContent = '📋'; }, 1500);
+  }
 }
 
 // QR
@@ -489,16 +636,12 @@ function showQRModal(imgId, label, url) {
 // Playlists
 
 document.getElementById('pl-load-btn').onclick = async () => {
-  const names = await (await fetch('/api/playlists')).json();
+  const playlists = await (await fetch('/api/playlists')).json();
   const list = document.getElementById('pl-list');
-  list.innerHTML = !names.length ? '<div class="pl-empty">未有儲存歌單</div>' : names.map(n => `
+  list.innerHTML = !playlists.length ? '<div class="pl-empty">未有儲存歌單</div>' : playlists.map(p => `
     <div class="pl-list-item">
-      <span>${esc(n)}</span>
-      <div style="display:flex;gap:6px">
-        <button onclick="openPlEditor('${esc(n)}')" style="padding:4px 10px;border:none;border-radius:6px;background:var(--panel);color:var(--text);border:1px solid var(--border);cursor:pointer;font-size:12px">✏️ 編輯</button>
-        <button onclick="loadPlaylist('${esc(n)}')" style="padding:4px 10px;border:none;border-radius:6px;background:var(--accent2);color:#fff;cursor:pointer;font-size:12px">▶ 載入</button>
-        <button onclick="deletePlaylist('${esc(n)}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">🗑</button>
-      </div>
+      <span>${p.locked ? '🔒 ' : ''}${esc(p.name)}</span>
+      <button onclick="loadPlaylist('${esc(p.name)}')" style="padding:4px 14px;border:none;border-radius:6px;background:var(--accent2);color:#fff;cursor:pointer;font-size:12px">▶ 載入</button>
     </div>
   `).join('');
   document.getElementById('pl-modal').classList.add('open');
@@ -506,8 +649,7 @@ document.getElementById('pl-load-btn').onclick = async () => {
 
 async function loadPlaylist(name) {
   const songs = await (await fetch(`/api/playlists/${encodeURIComponent(name)}`)).json();
-  emit('clear');
-  setTimeout(() => songs.forEach(s => emit('add', s)), 100);
+  songs.forEach(s => emit('add', s));
   closeModal('pl-modal');
 }
 
@@ -558,8 +700,7 @@ function plEditorRemove(i) { plEditorSongs.splice(i, 1); renderPlEditorSongs(); 
 function plEditorAddOne(i) { emit('add', { ...plEditorSongs[i], addedBy: 'Host' }); }
 
 function plEditorLoadAll() {
-  emit('clear');
-  setTimeout(() => plEditorSongs.forEach(s => emit('add', s)), 100);
+  plEditorSongs.forEach(s => emit('add', s));
   closeModal('pl-editor-modal');
 }
 
@@ -820,7 +961,397 @@ function updateFsBtn() {
 }
 document.addEventListener('fullscreenchange', updateFsBtn);
 document.addEventListener('webkitfullscreenchange', updateFsBtn);
+
+// ── Room switcher ────────────────────────────────────────────────────
+const ROOM_PALETTE = ['#e94560','#7c3aed','#0ea5e9','#10b981','#f59e0b','#ec4899','#06b6d4','#84cc16'];
+let currentRoom = { id: 'default', name: '預設房間', color: '#e94560' };
+let allRooms = [];
+let newRoomColor = ROOM_PALETTE[1];
+let roomEditMode = false;
+
+(function initRoomColors() {
+  const row = document.getElementById('room-clr-row');
+  if (!row) return;
+  ROOM_PALETTE.forEach(c => {
+    const d = document.createElement('span');
+    d.className = 'rclr' + (c === newRoomColor ? ' sel' : '');
+    d.style.background = c;
+    d.title = c;
+    d.onclick = () => {
+      newRoomColor = c;
+      row.querySelectorAll('.rclr').forEach(x => x.classList.remove('sel'));
+      d.classList.add('sel');
+    };
+    row.appendChild(d);
+  });
+})();
+
+function updateRoomPill() {
+  const pill = document.getElementById('room-pill');
+  const dot = document.getElementById('room-dot');
+  const label = document.getElementById('room-name-label');
+  if (!pill) return;
+  pill.style.setProperty('--rc', currentRoom.color);
+  if (dot) dot.style.background = currentRoom.color;
+  if (label) label.textContent = currentRoom.name;
+}
+
+async function fetchRooms() {
+  try {
+    const r = await fetch('/api/rooms');
+    allRooms = await r.json();
+    renderRoomList();
+  } catch {}
+}
+
+function renderRoomList() {
+  const list = document.getElementById('room-list');
+  if (!list) return;
+  const editBtn = `<button onclick="roomEditMode=!roomEditMode;renderRoomList()" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 8px">${roomEditMode ? '完成' : '✏️'}</button>`;
+  const header = `<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px 8px;border-bottom:1px solid var(--border);margin-bottom:4px"><span style="font-size:12px;color:var(--muted)">房間</span>${editBtn}</div>`;
+  const items = allRooms.map(r => {
+    const isActive = r.id === currentRoom.id;
+    const delBtn = (roomEditMode && r.id !== 'default')
+      ? `<button onclick="deleteRoom('${r.id}')" style="width:20px;height:20px;border-radius:50%;border:none;background:#e94560;color:#fff;cursor:pointer;font-size:13px;flex-shrink:0;padding:0;line-height:1;display:flex;align-items:center;justify-content:center">×</button>`
+      : `<span class="rodot" style="background:${r.color}"></span>`;
+    return `<div class="room-opt${isActive ? ' active' : ''}" onclick="${roomEditMode ? '' : `switchRoom('${r.id}')`}">${delBtn}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</span>${r.queueLen > 0 ? `<span style="font-size:11px;color:var(--muted)">${r.queueLen}首</span>` : ''}</div>`;
+  }).join('');
+  list.innerHTML = header + items;
+}
+
+async function deleteRoom(id) {
+  try {
+    await fetch(`/api/rooms/${id}`, { method: 'DELETE' });
+    await fetchRooms();
+    if (currentRoom.id === id) switchRoom('default');
+  } catch {}
+}
+
+function toggleRoomDD(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('room-dd');
+  const isOpen = dd.classList.toggle('open');
+  if (isOpen) fetchRooms();
+}
+
+function switchRoom(id) {
+  const r = allRooms.find(x => x.id === id);
+  if (!r) return;
+  currentRoom = r;
+  socket.emit('join-room', { roomId: id });
+  updateRoomPill();
+  renderRoomList();
+  document.getElementById('room-dd').classList.remove('open');
+}
+
+async function createNewRoom() {
+  const inp = document.getElementById('room-new-inp');
+  const name = inp.value.trim() || undefined;
+  try {
+    const res = await fetch('/api/rooms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, color: newRoomColor })
+    });
+    const room = await res.json();
+    inp.value = '';
+    await fetchRooms();
+    switchRoom(room.id);
+  } catch {}
+}
+
+socket.on('room-info', info => {
+  currentRoom = { ...currentRoom, ...info };
+  updateRoomPill();
+});
+
+document.addEventListener('click', e => {
+  const sw = document.getElementById('room-sw');
+  if (sw && !sw.contains(e.target)) document.getElementById('room-dd')?.classList.remove('open');
+});
+
+// Playlist Manager
+let pmCurrentName = null, pmCurrentSongs = [], pmIsLocked = false;
+
+function openPM() {
+  document.getElementById('pm-modal').classList.add('open');
+  pmLoadList();
+}
+function closePM() {
+  document.getElementById('pm-modal').classList.remove('open');
+}
+
+async function pmLoadList() {
+  const playlists = await (await fetch('/api/playlists')).json();
+  const c = document.getElementById('pm-pl-list');
+  if (!playlists.length) { c.innerHTML = '<div class="pm-pl-empty">尚未有歌單，按「新增」建立</div>'; return; }
+  c.innerHTML = playlists.map(p => `
+    <div class="pm-pl-item${p.locked ? ' pm-pl-locked' : ''}" id="pm-plitem-${CSS.escape(p.name)}" onclick="pmOpenPl('${esc(p.name)}', ${p.locked})">
+      <div class="pm-pl-name">${p.locked ? '🔒 ' : ''}${esc(p.name)}</div>
+      <div class="pm-pl-meta" id="pm-meta-${esc(p.name)}">載入中...</div>
+      <div class="pm-pl-actions" onclick="event.stopPropagation()">
+        <button class="pm-pl-act load" onclick="pmQuickLoad('${esc(p.name)}')">▶ 載入</button>
+        <button class="pm-pl-act ${p.locked ? 'unlock' : 'lock'}" onclick="pmToggleLock('${esc(p.name)}')" title="${p.locked ? '解鎖' : '鎖定'}">${p.locked ? '🔓' : '🔒'}</button>
+        ${!p.locked ? `<button class="pm-pl-act del" onclick="pmDeletePl('${esc(p.name)}')">🗑</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+  playlists.forEach(async p => {
+    try {
+      const songs = await (await fetch(`/api/playlists/${encodeURIComponent(p.name)}`)).json();
+      const el = document.getElementById(`pm-meta-${esc(p.name)}`);
+      if (el) el.textContent = `${songs.length} 首歌`;
+    } catch {}
+  });
+}
+
+async function pmToggleLock(name) {
+  const res = await fetch(`/api/playlists/${encodeURIComponent(name)}/lock`, { method: 'PATCH' });
+  if (!res.ok) return;
+  const d = await res.json();
+  if (pmCurrentName === name) {
+    pmIsLocked = d.locked;
+    pmUpdateLockUI();
+  }
+  pmLoadList();
+}
+
+function pmCreateNew() {
+  pmCurrentName = '';
+  pmCurrentSongs = [];
+  document.getElementById('pm-name').value = '';
+  document.getElementById('pm-add-input').value = '';
+  document.getElementById('pm-add-results').innerHTML = '';
+  pmRenderSongs();
+  pmShowEditor();
+  document.querySelectorAll('.pm-pl-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('pm-name').focus();
+}
+
+async function pmOpenPl(name, locked) {
+  pmCurrentName = name;
+  pmIsLocked = !!locked;
+  document.getElementById('pm-name').value = name;
+  document.getElementById('pm-name').readOnly = pmIsLocked;
+  document.getElementById('pm-add-input').value = '';
+  document.getElementById('pm-add-results').innerHTML = '';
+  try {
+    pmCurrentSongs = await (await fetch(`/api/playlists/${encodeURIComponent(name)}`)).json();
+  } catch { pmCurrentSongs = []; }
+  pmRenderSongs();
+  pmShowEditor();
+  pmUpdateLockUI();
+  document.querySelectorAll('.pm-pl-item').forEach(el => el.classList.remove('active'));
+  const item = document.getElementById(`pm-plitem-${CSS.escape(name)}`);
+  if (item) item.classList.add('active');
+}
+
+function pmUpdateLockUI() {
+  const banner = document.getElementById('pm-lock-banner');
+  const addPanel = document.querySelector('.pm-add-panel');
+  const editorBody = document.querySelector('.pm-editor-body');
+  const saveBtn = document.getElementById('pm-save-btn');
+  const exportBtn = document.getElementById('pm-export-btn');
+  if (banner) banner.style.display = pmIsLocked ? 'flex' : 'none';
+  if (addPanel) addPanel.style.display = pmIsLocked ? 'none' : 'flex';
+  if (editorBody) editorBody.classList.toggle('locked', pmIsLocked);
+  if (saveBtn) saveBtn.style.display = pmIsLocked ? 'none' : '';
+  if (exportBtn) exportBtn.style.display = pmIsLocked ? '' : '';
+}
+
+function pmShowEditor() {
+  document.getElementById('pm-editor-empty').style.display = 'none';
+  document.getElementById('pm-editor-main').style.display = 'flex';
+}
+
+function pmRenderSongs() {
+  const c = document.getElementById('pm-song-list');
+  document.getElementById('pm-songs-count').textContent = `歌單共 ${pmCurrentSongs.length} 首`;
+  if (!pmCurrentSongs.length) {
+    c.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">歌單係空嘅，左邊搜尋加歌</div>';
+    return;
+  }
+  c.innerHTML = pmCurrentSongs.map((s, i) => `
+    <div style="display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:7px;background:var(--panel)">
+      <span style="font-size:11px;color:var(--muted);width:18px;text-align:center;flex-shrink:0">${i+1}</span>
+      <img src="${s.thumbnail||`https://i.ytimg.com/vi/${s.videoId}/mqdefault.jpg`}" onerror="this.src='https://i.ytimg.com/vi/${s.videoId}/mqdefault.jpg'" style="width:50px;height:28px;object-fit:cover;border-radius:4px;flex-shrink:0" />
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title)}</div>
+        <div style="font-size:10px;color:var(--muted)">${esc(s.author||'')}</div>
+      </div>
+      <button onclick="pmAddOneToQueue(${i})" style="padding:3px 7px;border:none;border-radius:4px;background:var(--accent2);color:#fff;cursor:pointer;font-size:11px;flex-shrink:0">+隊</button>
+      ${!pmIsLocked ? `<button onclick="pmRemoveSong(${i})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:17px;line-height:1;flex-shrink:0;padding:0 3px">×</button>` : ''}
+    </div>
+  `).join('');
+}
+
+function pmRemoveSong(i) { pmCurrentSongs.splice(i, 1); pmRenderSongs(); }
+function pmAddOneToQueue(i) { emit('add', { ...pmCurrentSongs[i], addedBy: 'Playlist' }); }
+
+function pmAddAllToQueue() {
+  if (!pmCurrentSongs.length) return;
+  pmCurrentSongs.forEach(s => emit('add', { ...s, addedBy: 'Playlist' }));
+}
+
+function pmLoadToQueue() { pmAddAllToQueue(); }
+
+async function pmSavePl() {
+  const name = document.getElementById('pm-name').value.trim();
+  if (!name) { alert('請輸入歌單名稱'); return; }
+  await fetch(`/api/playlists/${encodeURIComponent(name)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(pmCurrentSongs)
+  });
+  pmCurrentName = name;
+  pmLoadList();
+}
+
+async function pmQuickLoad(name) {
+  const songs = await (await fetch(`/api/playlists/${encodeURIComponent(name)}`)).json();
+  songs.forEach(s => emit('add', { ...s, addedBy: 'Playlist' }));
+}
+
+async function pmDeletePl(name) {
+  if (!confirm(`刪除歌單「${name}」？`)) return;
+  await fetch(`/api/playlists/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  if (pmCurrentName === name) {
+    pmCurrentName = null;
+    pmCurrentSongs = [];
+    document.getElementById('pm-editor-empty').style.display = 'flex';
+    document.getElementById('pm-editor-main').style.display = 'none';
+  }
+  pmLoadList();
+}
+
+async function pmDoSearch() {
+  const q = document.getElementById('pm-add-input').value.trim();
+  if (!q) return;
+  const c = document.getElementById('pm-add-results');
+  c.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">搜尋中...</div>';
+  try {
+    const ytId = extractYouTubeId(q);
+    let results;
+    if (ytId) {
+      results = [await (await fetch(`/api/video/${ytId}`)).json()];
+    } else {
+      results = await (await fetch(`/api/search?q=${encodeURIComponent(q)}&page=1`)).json();
+    }
+    if (!results.length) { c.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">冇結果</div>'; return; }
+    c.innerHTML = '';
+    results.forEach(v => {
+      const div = document.createElement('div');
+      div.style.cssText = 'display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:7px;background:var(--panel)';
+      div.innerHTML = `
+        <img src="${v.thumbnail}" onerror="this.src='https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg'" style="width:56px;height:32px;object-fit:cover;border-radius:4px;flex-shrink:0" />
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.title)}</div>
+          <div style="font-size:10px;color:var(--muted)">${esc(v.author||'')}</div>
+        </div>
+        <button onclick='pmAddToCurrentPl(${JSON.stringify(JSON.stringify(v))},this)' style="padding:4px 9px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;font-size:12px;font-weight:600;flex-shrink:0">+</button>
+      `;
+      c.appendChild(div);
+    });
+  } catch { c.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">搜尋失敗</div>'; }
+}
+
+function pmExport() {
+  if (!pmCurrentSongs.length && !pmCurrentName) return;
+  const name = document.getElementById('pm-name').value.trim() || pmCurrentName || 'playlist';
+  const blob = new Blob([JSON.stringify(pmCurrentSongs, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${name}.json`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function pmTriggerImport() {
+  document.getElementById('pm-import-input').value = '';
+  document.getElementById('pm-import-input').click();
+}
+
+function pmImport(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const defaultName = file.name.replace(/\.json$/i, '');
+  const reader = new FileReader();
+  reader.onload = async e => {
+    let songs;
+    try { songs = JSON.parse(e.target.result); } catch { alert('檔案格式錯誤，請選擇有效嘅 JSON 檔案'); return; }
+    if (!Array.isArray(songs)) { alert('檔案格式錯誤：預期係歌曲陣列'); return; }
+    const name = prompt('歌單名稱：', defaultName);
+    if (!name || !name.trim()) return;
+    await fetch(`/api/playlists/${encodeURIComponent(name.trim())}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(songs)
+    });
+    pmLoadList();
+    pmOpenPl(name.trim());
+  };
+  reader.readAsText(file);
+}
+
+function pmAddToCurrentPl(jsonStr, btn) {
+  const v = JSON.parse(jsonStr);
+  pmCurrentSongs.push({ ...v, addedBy: 'Playlist' });
+  pmRenderSongs();
+  btn.textContent = '✓';
+  setTimeout(() => { btn.textContent = '+'; }, 1500);
+}
 </script>
+
+<!-- Playlist Manager Modal -->
+<div class="modal-overlay" id="pm-modal">
+  <div class="pm-modal">
+    <div class="pm-topbar">
+      <h2>Kara<span>Queue</span> 🎤 歌單管理</h2>
+      <button class="pm-close" onclick="closePM()">×</button>
+    </div>
+    <div class="pm-layout">
+      <div class="pm-sidebar">
+        <div class="pm-sidebar-hdr">
+          <h3>所有歌單</h3>
+          <div style="display:flex;gap:5px">
+            <button class="new-btn" onclick="pmCreateNew()">+ 新增</button>
+            <button class="new-btn" onclick="pmTriggerImport()" style="background:var(--accent2)" title="從 JSON 檔案匯入歌單">📥</button>
+          </div>
+        </div>
+        <input type="file" id="pm-import-input" accept=".json" style="display:none" onchange="pmImport(this)" />
+        <div class="pm-pl-list" id="pm-pl-list">
+          <div class="pm-pl-empty">載入中...</div>
+        </div>
+      </div>
+      <div class="pm-editor">
+        <div class="pm-editor-empty" id="pm-editor-empty">← 選擇或新增歌單開始編輯</div>
+        <div id="pm-editor-main" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+          <div class="pm-lock-banner" id="pm-lock-banner" style="display:none">🔒 呢個歌單已鎖定，唔可以修改。喺左邊按 🔓 解鎖。</div>
+          <div class="pm-editor-hdr">
+            <input id="pm-name" type="text" placeholder="歌單名稱..." />
+            <button id="pm-save-btn" class="pm-hdr-btn save" onclick="pmSavePl()">💾 儲存</button>
+            <button id="pm-export-btn" class="pm-hdr-btn save" onclick="pmExport()" title="匯出為 JSON 檔案">📤 匯出</button>
+            <button class="pm-hdr-btn loadq" onclick="pmLoadToQueue()">▶ 載入隊列</button>
+          </div>
+          <div class="pm-editor-body">
+            <div class="pm-add-panel">
+              <div class="pm-add-hdr">搜尋 / 新增歌曲</div>
+              <div class="pm-search-row">
+                <input id="pm-add-input" type="text" placeholder="歌名、歌手或 YouTube 連結..." onkeydown="if(event.key==='Enter')pmDoSearch()" />
+                <button onclick="pmDoSearch()">搜</button>
+              </div>
+              <div class="pm-add-results" id="pm-add-results"></div>
+            </div>
+            <div class="pm-songs-panel">
+              <div class="pm-songs-hdr">
+                <span id="pm-songs-count">歌單內容</span>
+                <button onclick="pmAddAllToQueue()" style="padding:3px 8px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;font-size:11px">全加隊列</button>
+              </div>
+              <div class="pm-song-list" id="pm-song-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Manual classify modal -->
 <div class="modal-overlay" id="manual-modal" onclick="if(event.target===this)this.classList.remove('open')">

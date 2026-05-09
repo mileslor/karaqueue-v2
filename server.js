@@ -31,6 +31,14 @@ app.get('/playlists', (_req, res) => res.sendFile(join(__dirname, 'public', 'pla
 const playlistsDir = join(__dirname, 'playlists');
 if (!fs.existsSync(playlistsDir)) fs.mkdirSync(playlistsDir, { recursive: true });
 
+const playlistsMetaPath = join(playlistsDir, '.meta.json');
+function readMeta() {
+  try { if (fs.existsSync(playlistsMetaPath)) return JSON.parse(fs.readFileSync(playlistsMetaPath, 'utf-8')); } catch (_) {}
+  return {};
+}
+function writeMeta(meta) { fs.writeFileSync(playlistsMetaPath, JSON.stringify(meta, null, 2)); }
+function isLocked(name) { const m = readMeta(); return !!(m[name] && m[name].locked); }
+
 const songsDbPath = process.env.SONGS_DB_PATH || join(__dirname, 'songs-db.json');
 function loadSongsDb() {
   try { if (fs.existsSync(songsDbPath)) return JSON.parse(fs.readFileSync(songsDbPath, 'utf-8')); } catch (_) {}
@@ -188,23 +196,62 @@ function getLocalIP() {
   return '127.0.0.1';
 }
 
-let queue = [];
-let currentIndex = -1;
-let videoEndedTimer = null;
-let playStartTime = null;
-let playingVideo = null;
 let autoClassify = true;
 
-function checkPlayTime() {
-  if (!playingVideo || !playStartTime) return;
-  const elapsed = Date.now() - playStartTime;
-  const v = playingVideo;
-  playingVideo = null; playStartTime = null;
+// ─── Multi-room management ────────────────────────────────────────────
+const rooms = new Map();
+
+function genRoomId() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let id;
+  do { id = Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join(''); }
+  while (rooms.has(id));
+  return id;
+}
+
+const ROOM_COLORS = ['#e94560','#7c3aed','#0ea5e9','#10b981','#f59e0b','#ec4899','#06b6d4','#84cc16'];
+let _colorIdx = 0;
+
+function createRoom(name, fixedId, color) {
+  const id = fixedId || genRoomId();
+  const room = {
+    id, name: name || `房間 ${id}`,
+    color: color || ROOM_COLORS[_colorIdx++ % ROOM_COLORS.length],
+    queue: [], currentIndex: -1,
+    videoEndedTimer: null, playStartTime: null, playingVideo: null,
+    shuffleMode: false, createdAt: Date.now()
+  };
+  rooms.set(id, room);
+  return room;
+}
+
+// Always-present default room for backward compat
+createRoom('預設房間', 'default');
+
+function maybeShuffleNext(room) {
+  if (!room.shuffleMode) return;
+  const nextIdx = room.currentIndex + 1;
+  const remaining = room.queue.length - nextIdx - 1;
+  if (remaining > 0) {
+    const swapIdx = nextIdx + 1 + Math.floor(Math.random() * remaining);
+    [room.queue[nextIdx], room.queue[swapIdx]] = [room.queue[swapIdx], room.queue[nextIdx]];
+  }
+}
+
+function checkPlayTime(room) {
+  if (!room.playingVideo || !room.playStartTime) return;
+  const elapsed = Date.now() - room.playStartTime;
+  const v = room.playingVideo;
+  room.playingVideo = null; room.playStartTime = null;
   if (autoClassify && elapsed >= 120000) {
     classifyAndSave(v).then(r => {
-      if (r === 'failed') console.warn(`[Catalog] 自動分類失敗，請人手加入: ${v.title}`);
+      if (r === 'failed') console.warn(`[Catalog] 自動分類失敗: ${v.title}`);
     }).catch(() => {});
   }
+}
+
+function emitRoomState(room) {
+  io.to(room.id).emit('state', { queue: room.queue, currentIndex: room.currentIndex, shuffleMode: room.shuffleMode });
 }
 
 app.get('/api/qr', async (req, res) => {
@@ -224,8 +271,12 @@ function validPlaylistName(name) {
 }
 
 app.get('/api/playlists', (_req, res) => {
-  const files = fs.readdirSync(playlistsDir).filter(f => f.endsWith('.json'));
-  res.json(files.map(f => f.replace('.json', '')));
+  const files = fs.readdirSync(playlistsDir).filter(f => f.endsWith('.json') && f !== '.meta.json');
+  const meta = readMeta();
+  res.json(files.map(f => {
+    const name = f.replace('.json', '');
+    return { name, locked: !!(meta[name] && meta[name].locked) };
+  }));
 });
 
 app.get('/api/playlists/:name', (req, res) => {
@@ -238,13 +289,37 @@ app.get('/api/playlists/:name', (req, res) => {
 app.post('/api/playlists/:name', (req, res) => {
   if (!validPlaylistName(req.params.name)) return res.status(400).json({ error: 'Invalid name' });
   if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Invalid data' });
+  if (isLocked(req.params.name)) return res.status(403).json({ error: 'Playlist is locked' });
   const fp = join(playlistsDir, `${req.params.name}.json`);
   fs.writeFileSync(fp, JSON.stringify(req.body, null, 2));
   res.json({ ok: true });
 });
 
+app.post('/api/playlists/:name/add-song', (req, res) => {
+  if (!validPlaylistName(req.params.name)) return res.status(400).json({ error: 'Invalid name' });
+  if (isLocked(req.params.name)) return res.status(403).json({ error: 'Playlist is locked' });
+  const fp = join(playlistsDir, `${req.params.name}.json`);
+  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Not found' });
+  const songs = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+  songs.push(req.body);
+  fs.writeFileSync(fp, JSON.stringify(songs, null, 2));
+  res.json({ ok: true });
+});
+
+app.patch('/api/playlists/:name/lock', (req, res) => {
+  if (!validPlaylistName(req.params.name)) return res.status(400).json({ error: 'Invalid name' });
+  const fp = join(playlistsDir, `${req.params.name}.json`);
+  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Not found' });
+  const meta = readMeta();
+  if (!meta[req.params.name]) meta[req.params.name] = {};
+  meta[req.params.name].locked = !meta[req.params.name].locked;
+  writeMeta(meta);
+  res.json({ ok: true, locked: meta[req.params.name].locked });
+});
+
 app.delete('/api/playlists/:name', (req, res) => {
   if (!validPlaylistName(req.params.name)) return res.status(400).json({ error: 'Invalid name' });
+  if (isLocked(req.params.name)) return res.status(403).json({ error: 'Playlist is locked' });
   const fp = join(playlistsDir, `${req.params.name}.json`);
   if (fs.existsSync(fp)) fs.unlinkSync(fp);
   res.json({ ok: true });
@@ -434,150 +509,189 @@ app.delete('/api/catalog/:ytId', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Room API ────────────────────────────────────────────────────────
+app.get('/api/rooms', (_req, res) => {
+  res.json([...rooms.values()].map(r => ({
+    id: r.id, name: r.name, color: r.color, queueLen: r.queue.length,
+    currentIndex: r.currentIndex, createdAt: r.createdAt
+  })));
+});
+
+app.post('/api/rooms', (req, res) => {
+  const name = (req.body?.name || '').trim().slice(0, 40) || undefined;
+  const color = req.body?.color || undefined;
+  const room = createRoom(name, null, color);
+  res.json({ id: room.id, name: room.name, color: room.color });
+});
+
+app.delete('/api/rooms/:id', (req, res) => {
+  const id = req.params.id;
+  if (id === 'default') return res.status(400).json({ error: '不可刪除預設房間' });
+  if (!rooms.has(id)) return res.status(404).json({ error: 'Not found' });
+  rooms.delete(id);
+  io.to(id).emit('room-closed');
+  res.json({ ok: true });
+});
+
+// ─── Socket.IO ───────────────────────────────────────────────────────
+function emitPlay(room, song) {
+  room.playingVideo = { videoId: song.videoId, title: song.title, author: song.author || '', thumbnail: song.thumbnail || '' };
+  room.playStartTime = Date.now();
+  io.to(room.id).emit('play', { videoId: song.videoId, volume: song.volume ?? 70 });
+}
+
 io.on('connection', socket => {
-  socket.emit('state', { queue, currentIndex });
+  let room = rooms.get('default');
+  socket.join(room.id);
+  socket.emit('state', { queue: room.queue, currentIndex: room.currentIndex, shuffleMode: room.shuffleMode });
+  socket.emit('room-info', { id: room.id, name: room.name, color: room.color });
+
+  socket.on('join-room', ({ roomId }) => {
+    const target = rooms.get(roomId) || rooms.get('default');
+    socket.leave(room.id);
+    room = target;
+    socket.join(room.id);
+    socket.emit('state', { queue: room.queue, currentIndex: room.currentIndex, shuffleMode: room.shuffleMode });
+    socket.emit('room-info', { id: room.id, name: room.name, color: room.color });
+  });
 
   socket.on('add', video => {
     if (!video?.videoId || !/^[\w-]{11}$/.test(video.videoId)) return;
-    const wasEmpty = currentIndex === -1;
-    queue.push({ ...video, addedBy: video.addedBy || 'Guest', volume: 70 });
-    if (currentIndex === -1) currentIndex = 0;
-    io.emit('state', { queue, currentIndex });
-    if (wasEmpty) emitPlay(queue[currentIndex]);
+    const wasEmpty = room.currentIndex === -1;
+    room.queue.push({ ...video, addedBy: video.addedBy || 'Guest', volume: 70 });
+    if (room.currentIndex === -1) room.currentIndex = 0;
+    emitRoomState(room);
+    if (wasEmpty) emitPlay(room, room.queue[room.currentIndex]);
   });
 
   socket.on('add-next', video => {
     if (!video?.videoId || !/^[\w-]{11}$/.test(video.videoId)) return;
-    const wasEmpty = currentIndex === -1;
-    const insertAt = currentIndex === -1 ? 0 : currentIndex + 1;
-    queue.splice(insertAt, 0, { ...video, addedBy: video.addedBy || 'Guest', volume: 70 });
-    if (currentIndex === -1) currentIndex = 0;
-    io.emit('state', { queue, currentIndex });
-    if (wasEmpty) emitPlay(queue[currentIndex]);
+    const wasEmpty = room.currentIndex === -1;
+    const insertAt = room.currentIndex === -1 ? 0 : room.currentIndex + 1;
+    room.queue.splice(insertAt, 0, { ...video, addedBy: video.addedBy || 'Guest', volume: 70 });
+    if (room.currentIndex === -1) room.currentIndex = 0;
+    emitRoomState(room);
+    if (wasEmpty) emitPlay(room, room.queue[room.currentIndex]);
   });
 
   socket.on('song-volume', ({ idx, delta }) => {
-    if (idx < 0 || idx >= queue.length) return;
-    const cur = queue[idx].volume ?? 70;
-    queue[idx].volume = Math.max(0, Math.min(100, cur + delta));
-    io.emit('state', { queue, currentIndex });
-    if (idx === currentIndex) io.emit('volume', queue[idx].volume);
+    if (idx < 0 || idx >= room.queue.length) return;
+    const cur = room.queue[idx].volume ?? 70;
+    room.queue[idx].volume = Math.max(0, Math.min(100, cur + delta));
+    emitRoomState(room);
+    if (idx === room.currentIndex) io.to(room.id).emit('volume', room.queue[idx].volume);
   });
 
   socket.on('remove', idx => {
-    if (idx < 0 || idx >= queue.length) return;
-    if (idx === currentIndex) return;
-    queue.splice(idx, 1);
-    if (queue.length === 0) { currentIndex = -1; }
-    else if (idx < currentIndex) { currentIndex--; }
-    io.emit('state', { queue, currentIndex });
+    if (idx < 0 || idx >= room.queue.length) return;
+    if (idx === room.currentIndex) return;
+    room.queue.splice(idx, 1);
+    if (room.queue.length === 0) { room.currentIndex = -1; }
+    else if (idx < room.currentIndex) { room.currentIndex--; }
+    emitRoomState(room);
   });
 
   socket.on('play-index', idx => {
-    if (idx < 0 || idx >= queue.length || idx === currentIndex) return;
-    checkPlayTime();
-    if (currentIndex >= 0 && currentIndex < queue.length) {
-      queue.splice(currentIndex, 1);
-      if (idx > currentIndex) idx--;
+    if (idx < 0 || idx >= room.queue.length || idx === room.currentIndex) return;
+    checkPlayTime(room);
+    if (room.currentIndex >= 0 && room.currentIndex < room.queue.length) {
+      room.queue.splice(room.currentIndex, 1);
+      if (idx > room.currentIndex) idx--;
     }
-    const [song] = queue.splice(idx, 1);
-    queue.unshift(song);
-    currentIndex = 0;
-    io.emit('state', { queue, currentIndex });
-    emitPlay(queue[0]);
+    const [song] = room.queue.splice(idx, 1);
+    room.queue.unshift(song);
+    room.currentIndex = 0;
+    emitRoomState(room);
+    emitPlay(room, room.queue[0]);
   });
 
   socket.on('next', () => {
-    checkPlayTime();
-    if (currentIndex >= 0 && currentIndex < queue.length) queue.splice(currentIndex, 1);
-    if (queue.length === 0) {
-      currentIndex = -1;
-      io.emit('state', { queue, currentIndex });
-      io.emit('stop');
+    checkPlayTime(room);
+    if (room.currentIndex >= 0 && room.currentIndex < room.queue.length) room.queue.splice(room.currentIndex, 1);
+    if (room.queue.length === 0) {
+      room.currentIndex = -1;
+      emitRoomState(room);
+      io.to(room.id).emit('stop');
     } else {
-      if (currentIndex >= queue.length) currentIndex = 0;
-      io.emit('state', { queue, currentIndex });
-      emitPlay(queue[currentIndex]);
+      if (room.currentIndex >= room.queue.length) room.currentIndex = 0;
+      maybeShuffleNext(room);
+      emitRoomState(room);
+      emitPlay(room, room.queue[room.currentIndex]);
     }
   });
 
   socket.on('prev', () => {
-    if (currentIndex >= 0 && queue[currentIndex]) emitPlay(queue[currentIndex]);
+    if (room.currentIndex >= 0 && room.queue[room.currentIndex]) emitPlay(room, room.queue[room.currentIndex]);
   });
 
   socket.on('replay', () => {
-    if (currentIndex >= 0 && queue[currentIndex]) {
-      emitPlay(queue[currentIndex]);
-    }
+    if (room.currentIndex >= 0 && room.queue[room.currentIndex]) emitPlay(room, room.queue[room.currentIndex]);
   });
 
   socket.on('stop', () => {
-    checkPlayTime();
-    io.emit('stop');
+    checkPlayTime(room);
+    io.to(room.id).emit('stop');
   });
 
   socket.on('skip', () => {
-    checkPlayTime();
-    if (currentIndex >= 0 && currentIndex < queue.length) {
-      queue.splice(currentIndex, 1);
-    }
-    if (queue.length === 0) {
-      currentIndex = -1;
-      io.emit('state', { queue, currentIndex });
-      io.emit('stop');
+    checkPlayTime(room);
+    if (room.currentIndex >= 0 && room.currentIndex < room.queue.length) room.queue.splice(room.currentIndex, 1);
+    if (room.queue.length === 0) {
+      room.currentIndex = -1;
+      emitRoomState(room);
+      io.to(room.id).emit('stop');
     } else {
-      if (currentIndex >= queue.length) currentIndex = 0;
-      io.emit('state', { queue, currentIndex });
-      emitPlay(queue[currentIndex]);
+      if (room.currentIndex >= room.queue.length) room.currentIndex = 0;
+      maybeShuffleNext(room);
+      emitRoomState(room);
+      emitPlay(room, room.queue[room.currentIndex]);
     }
   });
 
   socket.on('volume', val => {
     const v = Math.max(0, Math.min(100, Number(val)));
-    if (!isNaN(v)) io.emit('volume', v);
+    if (!isNaN(v)) io.to(room.id).emit('volume', v);
   });
 
   socket.on('clear', () => {
-    queue = [];
-    currentIndex = -1;
-    io.emit('state', { queue, currentIndex });
-    io.emit('stop');
+    room.queue = [];
+    room.currentIndex = -1;
+    emitRoomState(room);
+    io.to(room.id).emit('stop');
   });
 
   socket.on('reorder', ({ from, to }) => {
-    if (from === to || from < 0 || from >= queue.length || to < 0 || to >= queue.length) return;
-    if (from === currentIndex) return;
-    const [item] = queue.splice(from, 1);
-    queue.splice(to, 0, item);
-    if (from < currentIndex && to >= currentIndex) currentIndex--;
-    else if (from > currentIndex && to <= currentIndex) currentIndex++;
-    io.emit('state', { queue, currentIndex });
+    if (from === to || from < 0 || from >= room.queue.length || to < 0 || to >= room.queue.length) return;
+    if (from === room.currentIndex) return;
+    const [item] = room.queue.splice(from, 1);
+    room.queue.splice(to, 0, item);
+    if (from < room.currentIndex && to >= room.currentIndex) room.currentIndex--;
+    else if (from > room.currentIndex && to <= room.currentIndex) room.currentIndex++;
+    emitRoomState(room);
   });
 
   socket.on('video-ended', () => {
-    if (videoEndedTimer) return;
-    videoEndedTimer = setTimeout(() => { videoEndedTimer = null; }, 3000);
-    checkPlayTime();
-    if (currentIndex >= 0 && currentIndex < queue.length) {
-      queue.splice(currentIndex, 1);
-    }
-    if (queue.length === 0) {
-      currentIndex = -1;
-      io.emit('state', { queue, currentIndex });
-      io.emit('loop');
+    if (room.videoEndedTimer) return;
+    room.videoEndedTimer = setTimeout(() => { room.videoEndedTimer = null; }, 3000);
+    checkPlayTime(room);
+    if (room.currentIndex >= 0 && room.currentIndex < room.queue.length) room.queue.splice(room.currentIndex, 1);
+    if (room.queue.length === 0) {
+      room.currentIndex = -1;
+      emitRoomState(room);
+      io.to(room.id).emit('loop');
     } else {
-      if (currentIndex >= queue.length) currentIndex = 0;
-      io.emit('state', { queue, currentIndex });
-      emitPlay(queue[currentIndex]);
+      if (room.currentIndex >= room.queue.length) room.currentIndex = 0;
+      maybeShuffleNext(room);
+      emitRoomState(room);
+      emitPlay(room, room.queue[room.currentIndex]);
     }
   });
-});
 
-function emitPlay(song) {
-  playingVideo = { videoId: song.videoId, title: song.title, author: song.author || '', thumbnail: song.thumbnail || '' };
-  playStartTime = Date.now();
-  io.emit('play', { videoId: song.videoId, volume: song.volume ?? 70 });
-}
+  socket.on('toggle-shuffle', () => {
+    room.shuffleMode = !room.shuffleMode;
+    emitRoomState(room);
+  });
+});
 
 const PORT = 3000;
 httpServer.listen(PORT, async () => {

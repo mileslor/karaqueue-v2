@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KaraQueue TV</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --bg: #0f0f1a; --panel: rgba(255,255,255,0.07); --border: rgba(255,255,255,0.12); --accent: #e94560; --text: #f0f0f0; --muted: #888; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 30px; -webkit-app-region: drag; }
+  .card { width: 100%; max-width: 420px; background: var(--panel); border: 1px solid var(--border); border-radius: 20px; padding: 34px 28px; -webkit-app-region: no-drag; text-align: center; }
+  .icon { font-size: 48px; margin-bottom: 8px; }
+  .logo { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .logo span { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 26px; }
+  label { display: block; text-align: left; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  input, select { width: 100%; padding: 11px 14px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.06); color: var(--text); font-size: 14px; outline: none; transition: border .2s; }
+  input:focus, select:focus { border-color: var(--accent); }
+  select option { background: #1a1a2e; }
+  .field { margin-bottom: 14px; text-align: left; }
+  .room-row { display: flex; gap: 8px; }
+  .room-row select { flex: 1; }
+  .icon-btn { flex-shrink: 0; width: 42px; padding: 0; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.06); color: var(--text); font-size: 16px; cursor: pointer; transition: all .15s; }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+  /* New room inline panel */
+  .new-room-panel { display: none; background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-top: 8px; text-align: left; }
+  .new-room-panel.open { display: block; }
+  .clr-row { display: flex; gap: 6px; margin-bottom: 10px; }
+  .clrdot { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; flex-shrink: 0; transition: border .1s; }
+  .clrdot.sel { border-color: #fff; }
+  .new-row { display: flex; gap: 8px; }
+  .new-row input { flex: 1; padding: 9px 12px; font-size: 13px; }
+  .new-row button { padding: 9px 14px; border: none; border-radius: 8px; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  .start-btn { width: 100%; padding: 15px; border: none; border-radius: 12px; margin-top: 18px; background: var(--accent); color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; transition: all .15s; }
+  .start-btn:hover { background: #d63651; transform: translateY(-1px); }
+  .start-btn:disabled { opacity: .5; cursor: default; transform: none; }
+  .err { color: #e94560; font-size: 12px; margin-top: 10px; min-height: 16px; }
+  .status { color: var(--muted); font-size: 11px; margin-top: 8px; }
+  .divider { display: flex; align-items: center; gap: 8px; margin: 4px 0 12px; }
+  .divider hr { flex: 1; border: none; border-top: 1px solid var(--border); }
+  .divider span { color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">🎤</div>
+  <div class="logo">Kara<span>Queue</span> TV</div>
+  <div class="sub">跨平台 KTV 客戶端</div>
+
+  <div class="field">
+    <label>伺服器地址</label>
+    <input id="server-url" type="text" value="http://192.168.1.74:3000" spellcheck="false" autocorrect="off" />
+  </div>
+
+  <div class="divider"><hr><span>房間</span><hr></div>
+
+  <div class="field">
+    <div class="room-row">
+      <select id="room-select" disabled>
+        <option value="default">預設房間</option>
+      </select>
+      <button class="icon-btn" title="新增房間" onclick="toggleNewPanel()">＋</button>
+      <button class="icon-btn" title="重新整理" onclick="loadRooms()">↺</button>
+    </div>
+
+    <div class="new-room-panel" id="new-room-panel">
+      <label style="margin-bottom:8px">顏色</label>
+      <div class="clr-row" id="clr-row"></div>
+      <div class="new-row">
+        <input id="new-room-name" placeholder="房間名稱（可留空）" onkeydown="if(event.key==='Enter')doCreate()" />
+        <button onclick="doCreate()">建立</button>
+      </div>
+    </div>
+  </div>
+
+  <button class="start-btn" id="start-btn" onclick="startTV()">▶ 開始 KTV</button>
+  <div class="err" id="err"></div>
+  <div class="status" id="status">正在連接伺服器…</div>
+</div>
+
+<script>
+const api = window.electronAPI;
+const PALETTE = ['#e94560','#7c3aed','#0ea5e9','#10b981','#f59e0b','#ec4899','#06b6d4','#84cc16'];
+let newColor = PALETTE[1];
+
+// Build color picker
+(function() {
+  const row = document.getElementById('clr-row');
+  PALETTE.forEach(c => {
+    const d = document.createElement('span');
+    d.className = 'clrdot' + (c === newColor ? ' sel' : '');
+    d.style.background = c;
+    d.onclick = () => { newColor = c; row.querySelectorAll('.clrdot').forEach(x => x.classList.remove('sel')); d.classList.add('sel'); };
+    row.appendChild(d);
+  });
+})();
+
+async function loadRooms() {
+  const url = document.getElementById('server-url').value.trim();
+  if (!url) return;
+  setStatus('連接中…'); showErr('');
+  const result = await api.fetchRooms(url);
+  const sel = document.getElementById('room-select');
+  if (!result.ok) { sel.disabled = true; setStatus(''); return showErr('連接失敗：' + result.error); }
+  const prev = sel.value;
+  sel.innerHTML = '';
+  (result.rooms || []).forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.queueLen > 0 ? `${r.name}（${r.queueLen}首）` : r.name;
+    sel.appendChild(opt);
+  });
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  sel.disabled = false;
+  setStatus(`✓ 已連接　${result.rooms.length} 個房間`);
+  showErr('');
+}
+
+function toggleNewPanel() {
+  document.getElementById('new-room-panel').classList.toggle('open');
+}
+
+async function doCreate() {
+  const url = document.getElementById('server-url').value.trim();
+  if (!url) return showErr('請先填伺服器地址');
+  const name = document.getElementById('new-room-name').value.trim() || undefined;
+  const result = await api.createRoom(url, name, newColor);
+  if (!result.ok) return showErr('建立失敗：' + result.error);
+  document.getElementById('new-room-name').value = '';
+  document.getElementById('new-room-panel').classList.remove('open');
+  await loadRooms();
+  document.getElementById('room-select').value = result.room.id;
+  showErr('');
+}
+
+function startTV() {
+  const serverUrl = document.getElementById('server-url').value.trim();
+  if (!serverUrl) return showErr('請輸入伺服器地址');
+  const sel = document.getElementById('room-select');
+  const roomId = sel.value || 'default';
+  document.getElementById('start-btn').disabled = true;
+  document.getElementById('start-btn').textContent = '連接中…';
+  showErr('');
+  api.startTV({ serverUrl, roomId });
+}
+
+api.onError(msg => {
+  document.getElementById('start-btn').disabled = false;
+  document.getElementById('start-btn').textContent = '▶ 開始 KTV';
+  showErr(msg);
+});
+
+document.getElementById('server-url').addEventListener('input', () => {
+  clearTimeout(window._lt);
+  window._lt = setTimeout(loadRooms, 800);
+});
+document.getElementById('server-url').addEventListener('keydown', e => { if (e.key === 'Enter') startTV(); });
+
+function showErr(m) { document.getElementById('err').textContent = m; }
+function setStatus(m) { document.getElementById('status').textContent = m; }
+
+loadRooms();
+</script>
+</body>
+</html>
