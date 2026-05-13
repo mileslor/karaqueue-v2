@@ -1,6 +1,6 @@
 {
   "name": "karaqueue-tv",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "KaraQueue TV Client — cross-platform YouTube KTV player",
   "main": "main.js",
   "scripts": {

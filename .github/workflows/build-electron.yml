@@ -57,13 +57,15 @@ jobs:
         with:
           node-version: '20'
       - name: Install deps
-        run: sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libgbm-dev
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libgbm-dev
       - name: Install npm deps
         working-directory: electron-tv
         run: npm install
       - name: Build AppImage
         working-directory: electron-tv
         run: npm run build:linux
+        env:
+          DISPLAY: ':99'
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
@@ -85,3 +87,27 @@ jobs:
         with:
           files: dist/**
           tag_name: ${{ github.ref_name }}
+          body: |
+            ## KaraQueue TV ${{ github.ref_name }}
+
+            跨平台 KTV 電視客戶端 App。透過內置 Proxy 解決 YouTube 只允許 localhost 播放的限制。
+
+            ### 下載
+
+            | 平台 | 檔案 |
+            |------|------|
+            | 🍎 Mac (Apple Silicon / M1~M4) | `KaraQueue.TV-*-arm64.dmg` |
+            | 🍎 Mac (Intel) | `KaraQueue.TV-*.dmg` |
+            | 🪟 Windows | `KaraQueue.TV.Setup.*.exe` |
+            | 🐧 Linux / Steam Deck | `KaraQueue.TV-*.AppImage` |
+
+            > **Mac 用家注意**：App 未經 Apple 簽名，首次開啟需右鍵 → 打開，或前往「系統設定 → 私隱與安全性 → 仍要打開」。
+
+            ### Server（主機必裝）
+
+            ```bash
+            git clone https://github.com/mileslor/karaqueue-v2.git
+            cd karaqueue-v2
+            npm install
+            node server.js
+            ```
