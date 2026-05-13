@@ -101,7 +101,13 @@ jobs:
             | 🪟 Windows | `KaraQueue.TV.Setup.*.exe` |
             | 🐧 Linux / Steam Deck | `KaraQueue.TV-*.AppImage` |
 
-            > **Mac 用家注意**：App 未經 Apple 簽名，首次開啟需右鍵 → 打開，或前往「系統設定 → 私隱與安全性 → 仍要打開」。
+            > **Mac 用家注意**：App 未經 Apple 簽名，macOS 可能提示「已損毀」。請先將 App 拖入 Applications，再開啟 **Terminal** 執行：
+            > ```
+            > xattr -cr "/Applications/KaraQueue TV.app"
+            > ```
+            > 執行後 double-click 即可正常開啟。
+
+            > **Windows 用家注意**：執行 .exe 時若出現 SmartScreen 警告，按「**更多資訊**」→「**仍要執行**」即可。
 
             ### Server（主機必裝）
 
