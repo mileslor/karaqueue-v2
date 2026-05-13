@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<script>(function(){var m=localStorage.getItem('kq-vp')||'mobile';var t=document.createElement('meta');t.name='viewport';t.id='kq-vp';t.content=m==='desktop'?'width=1024,initial-scale=1.0,user-scalable=no':'width=device-width,initial-scale=1.0,user-scalable=no';document.head.appendChild(t);})();</script>
+<meta name="viewport" content="width=1024,initial-scale=1.0,user-scalable=no">
 <title>KaraQueue 控制台 🎤</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -224,7 +224,7 @@
     <button class="ctrl-btn" onclick="emit('next')">⏭</button>
     <span style="display:flex;align-items:center;gap:6px;padding:0 4px">
       <span style="font-size:14px">🔊</span>
-      <input type="range" id="vol-slider" min="0" max="100" value="100" style="width:90px;accent-color:var(--accent);cursor:pointer" />
+      <input type="range" id="vol-slider" min="0" max="100" value="70" disabled style="width:90px;opacity:0.45;cursor:default;pointer-events:none" />
       <span id="vol-label" style="font-size:12px;color:var(--muted);width:28px">100</span>
     </span>
     <button class="ctrl-btn" id="auto-classify-btn" onclick="toggleAutoClassify()" title="自動收錄歌庫">🎵</button>
@@ -247,7 +247,7 @@
       </div>
     </div>
     <a href="/settings" class="vp-toggle" title="設定" style="text-decoration:none;display:flex;align-items:center;justify-content:center">⚙️</a>
-    <button class="vp-toggle" id="vp-btn" onclick="toggleViewport()" title="切換桌面/手機版">📱</button>
+
     <button class="vp-toggle" id="fs-btn" onclick="toggleFullscreen()" title="全螢幕">⛶</button>
   </div>
 </div>
@@ -476,10 +476,6 @@ function confirmClear() { if (confirm('清空 Queue？')) emit('clear'); }
 // Volume
 const volSlider = document.getElementById('vol-slider');
 const volLabel = document.getElementById('vol-label');
-volSlider.addEventListener('input', () => {
-  volLabel.textContent = volSlider.value;
-  emit('volume', Number(volSlider.value));
-});
 
 // Search
 const searchInput = document.getElementById('search-input');
@@ -768,7 +764,7 @@ function renderCatalog() {
   if (catalogNav.level === 1) {
     hdr.innerHTML = `<span style="font-size:12px;color:var(--muted)">選擇類別</span>`;
     if (!catalogDb.length) {
-      c.innerHTML = '<div class="catalog-empty">歌庫暫時係空嘅<br>唱夠 2 分鐘自動收錄 🎤</div>';
+      c.innerHTML = '<div class="catalog-empty">歌庫暫時係空嘅 🎵<br><br>收錄歌曲有兩個方法：<br><span style="font-size:12px;line-height:2">① 上方 🎵 制開啟自動收錄，唱夠 2 分鐘自動加入<br>② 喺 Queue 入面按 📀 制手動記錄</span><br><br><a href="/settings" style="color:var(--accent);font-size:12px;text-decoration:none;opacity:.8">⚙️ 前往設定了解更多</a></div>';
       return;
     }
     const genderOrder = ['男', '女', '組合', '合唱'];
@@ -833,7 +829,7 @@ async function deleteCatalogSong(ytId) {
 function addCatalogSong(ytId) {
   const s = catalogDb.find(s => s.ytId === ytId);
   if (!s) return;
-  emit('add', { videoId: s.ytId, title: s.title, author: s.singer, thumbnail: s.thumbnail, duration: 0, addedBy: 'Host' });
+  emit('add', { videoId: s.ytId, title: s.title, author: s.singer, thumbnail: s.thumbnail, duration: 0, volume: s.volume, addedBy: 'Host' });
 }
 
 let hasApiKey = false;
@@ -933,15 +929,12 @@ async function loadCatalog() {
 loadCatalog();
 
 socket.on('catalog-updated', entry => {
-  if (!catalogDb.find(s => s.ytId === entry.ytId)) { catalogDb.push(entry); renderCatalog(); }
+  const i = catalogDb.findIndex(s => s.ytId === entry.ytId);
+  if (i >= 0) Object.assign(catalogDb[i], entry);
+  else { catalogDb.push(entry); renderCatalog(); }
 });
+socket.on('catalog-reloaded', entries => { catalogDb = entries; renderCatalog(); });
 
-function toggleViewport() {
-  var cur = localStorage.getItem('kq-vp') || 'mobile';
-  localStorage.setItem('kq-vp', cur === 'mobile' ? 'desktop' : 'mobile');
-  location.reload();
-}
-(function(){ var m = localStorage.getItem('kq-vp') || 'mobile'; var btn = document.getElementById('vp-btn'); if(btn){ btn.textContent = m==='desktop'?'💻':'📱'; btn.classList.toggle('desktop', m==='desktop'); } })();
 
 function toggleFullscreen() {
   var el = document.documentElement;

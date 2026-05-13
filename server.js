@@ -15,6 +15,23 @@ if (fs.existsSync(envFile)) {
   });
 }
 
+const APP_VERSION = JSON.parse(fs.readFileSync(join(__dirname, 'package.json'), 'utf-8')).version;
+
+let updateInfo = null;
+async function checkForUpdates() {
+  try {
+    const r = await fetch('https://api.github.com/repos/mileslor/karaqueue-v2/releases/latest', {
+      headers: { 'User-Agent': `KaraQueue/${APP_VERSION}` },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    const latest = (data.tag_name || '').replace(/^v/, '');
+    updateInfo = { hasUpdate: latest && latest !== APP_VERSION, latestVersion: latest, downloadUrl: data.html_url };
+    if (updateInfo.hasUpdate) console.log(`[Update] 有新版本：v${latest}`);
+  } catch (e) { console.log('[Update] 檢查失敗:', e.message); }
+}
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*' } });
@@ -171,6 +188,7 @@ async function classifyAndSave(video) {
       gender: c.gender || '未知',
       language: c.language || '其他',
       era: c.era || '未知',
+      volume: defaultVol(),
       titleFirstChar: (video.title || '')[0] || '',
       singerFirstChar: singer[0] || '',
       addedAt: new Date().toISOString()
@@ -196,7 +214,8 @@ function getLocalIP() {
   return '127.0.0.1';
 }
 
-let autoClassify = true;
+let autoClassify = process.env.AUTO_CLASSIFY === 'true';
+function defaultVol() { return Math.max(0, Math.min(100, parseInt(process.env.DEFAULT_VOLUME) || 70)); }
 
 // ─── Multi-room management ────────────────────────────────────────────
 const rooms = new Map();
@@ -433,17 +452,23 @@ const PROVIDER_KEY_MAP = { minimax: 'MINIMAX_API_KEY', openai: 'OPENAI_API_KEY',
 
 app.get('/api/settings', (_req, res) => {
   const { provider, key } = getActiveAI();
-  res.json({ autoClassify, provider, hasApiKey: !!key, songsDbPath });
+  res.json({ autoClassify, provider, hasApiKey: !!key, songsDbPath, defaultVolume: defaultVol(), autoUpdate: process.env.AUTO_UPDATE === 'true' });
+});
+
+app.get('/api/update-check', (_req, res) => {
+  res.json({ currentVersion: APP_VERSION, autoUpdate: process.env.AUTO_UPDATE === 'true', ...updateInfo });
 });
 
 app.post('/api/settings', async (req, res) => {
-  const { apiKey, autoClassify: ac, provider } = req.body || {};
+  const { apiKey, autoClassify: ac, provider, defaultVolume: dv, autoUpdate: au } = req.body || {};
   if (provider) saveEnvKey('AI_PROVIDER', provider);
   if (apiKey !== undefined && apiKey !== '') {
     const envKey = PROVIDER_KEY_MAP[provider || process.env.AI_PROVIDER || 'minimax'] || 'MINIMAX_API_KEY';
     saveEnvKey(envKey, apiKey);
   }
-  if (ac !== undefined) autoClassify = !!ac;
+  if (ac !== undefined) { autoClassify = !!ac; saveEnvKey('AUTO_CLASSIFY', autoClassify ? 'true' : 'false'); }
+  if (dv !== undefined) saveEnvKey('DEFAULT_VOLUME', String(Math.max(0, Math.min(100, parseInt(dv) || 70))));
+  if (au !== undefined) saveEnvKey('AUTO_UPDATE', au ? 'true' : 'false');
   res.json({ ok: true });
 });
 
@@ -458,6 +483,16 @@ app.post('/api/settings/test-key', async (req, res) => {
   } catch (e) {
     res.json({ ok: false, msg: '連線失敗：' + e.message });
   }
+});
+
+app.post('/api/queue/reset-volumes', (_req, res) => {
+  const vol = defaultVol();
+  for (const room of rooms.values()) {
+    room.queue.forEach(s => { s.volume = vol; });
+    emitRoomState(room);
+    if (room.currentIndex >= 0) io.to(room.id).emit('volume', vol);
+  }
+  res.json({ ok: true, volume: vol });
 });
 
 app.post('/api/settings/auto-classify', (req, res) => {
@@ -478,7 +513,7 @@ app.post('/api/catalog/add', async (req, res) => {
 });
 
 app.post('/api/catalog/manual-add', (req, res) => {
-  const { videoId, title, singer, gender, language, era, thumbnail } = req.body || {};
+  const { videoId, title, singer, gender, language, era, thumbnail, volume } = req.body || {};
   if (!videoId || !/^[\w-]{11}$/.test(videoId)) return res.status(400).json({ error: 'Invalid videoId' });
   if (!singer) return res.status(400).json({ error: 'singer required' });
   const db = loadSongsDb();
@@ -491,6 +526,7 @@ app.post('/api/catalog/manual-add', (req, res) => {
     gender: gender || '未知',
     language: language || '廣東話',
     era: era || '未知',
+    volume: Math.max(0, Math.min(100, parseInt(volume) || defaultVol())),
     titleFirstChar: (title || '')[0] || '',
     singerFirstChar: singer.trim()[0] || '',
     addedAt: new Date().toISOString()
@@ -500,6 +536,20 @@ app.post('/api/catalog/manual-add', (req, res) => {
   io.emit('catalog-updated', entry);
   console.log(`[Catalog] 人手新增: ${entry.title} (${entry.singer})`);
   res.json({ ok: true });
+});
+
+app.delete('/api/catalog', (_req, res) => {
+  saveSongsDb([]);
+  io.emit('catalog-reloaded', []);
+  res.json({ ok: true });
+});
+
+app.post('/api/catalog/import', (req, res) => {
+  if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Invalid data' });
+  const valid = req.body.filter(s => s.ytId && /^[\w-]{11}$/.test(s.ytId));
+  saveSongsDb(valid);
+  io.emit('catalog-reloaded', valid);
+  res.json({ ok: true, count: valid.length });
 });
 
 app.delete('/api/catalog/:ytId', (req, res) => {
@@ -558,7 +608,7 @@ io.on('connection', socket => {
   socket.on('add', video => {
     if (!video?.videoId || !/^[\w-]{11}$/.test(video.videoId)) return;
     const wasEmpty = room.currentIndex === -1;
-    room.queue.push({ ...video, addedBy: video.addedBy || 'Guest', volume: 70 });
+    room.queue.push({ ...video, addedBy: video.addedBy || 'Guest', volume: video.volume ?? defaultVol() });
     if (room.currentIndex === -1) room.currentIndex = 0;
     emitRoomState(room);
     if (wasEmpty) emitPlay(room, room.queue[room.currentIndex]);
@@ -568,7 +618,7 @@ io.on('connection', socket => {
     if (!video?.videoId || !/^[\w-]{11}$/.test(video.videoId)) return;
     const wasEmpty = room.currentIndex === -1;
     const insertAt = room.currentIndex === -1 ? 0 : room.currentIndex + 1;
-    room.queue.splice(insertAt, 0, { ...video, addedBy: video.addedBy || 'Guest', volume: 70 });
+    room.queue.splice(insertAt, 0, { ...video, addedBy: video.addedBy || 'Guest', volume: video.volume ?? defaultVol() });
     if (room.currentIndex === -1) room.currentIndex = 0;
     emitRoomState(room);
     if (wasEmpty) emitPlay(room, room.queue[room.currentIndex]);
@@ -576,10 +626,13 @@ io.on('connection', socket => {
 
   socket.on('song-volume', ({ idx, delta }) => {
     if (idx < 0 || idx >= room.queue.length) return;
-    const cur = room.queue[idx].volume ?? 70;
+    const cur = room.queue[idx].volume ?? defaultVol();
     room.queue[idx].volume = Math.max(0, Math.min(100, cur + delta));
     emitRoomState(room);
     if (idx === room.currentIndex) io.to(room.id).emit('volume', room.queue[idx].volume);
+    const db = loadSongsDb();
+    const catalogEntry = db.find(s => s.ytId === room.queue[idx].videoId);
+    if (catalogEntry) { catalogEntry.volume = room.queue[idx].volume; saveSongsDb(db); io.emit('catalog-updated', catalogEntry); }
   });
 
   socket.on('remove', idx => {
@@ -695,6 +748,7 @@ io.on('connection', socket => {
 
 const PORT = 3000;
 httpServer.listen(PORT, async () => {
+  if (process.env.AUTO_UPDATE === 'true') checkForUpdates();
   const ip = getLocalIP();
   const localName = `${hostname()}.local`;
   const remoteUrl = `http://${localName}:${PORT}/remote`;

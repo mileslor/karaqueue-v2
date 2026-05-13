@@ -118,7 +118,7 @@
     <div class="toggle-row">
       <div class="toggle-label">
         <span>🎵 播放 2 分鐘後自動收錄歌庫</span>
-        <small>需要 API Key 才能運作；首次播放先分類，之後再播唔會重複</small>
+        <small>預設關閉。需要 AI API Key 才能運作，唱夠 2 分鐘自動分類入歌庫，之後重播唔會重複。<br>冇 API Key？可喺主畫面 Queue 入面按 📀 手動記錄歌曲。</small>
       </div>
       <label class="toggle">
         <input type="checkbox" id="auto-classify-toggle" onchange="onToggleChange()" />
@@ -127,10 +127,54 @@
     </div>
   </div>
 
+  <!-- 預設音量 -->
+  <div class="card">
+    <div class="card-title">預設音量</div>
+    <div class="field">
+      <label>新加歌曲嘅預設音量</label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="range" id="default-vol-slider" min="0" max="100" value="70" style="flex:1;accent-color:var(--accent)" oninput="document.getElementById('default-vol-label').textContent=this.value+'%';hideSaveMsg()">
+        <span id="default-vol-label" style="width:36px;text-align:right;font-size:14px;font-weight:600">70%</span>
+      </div>
+      <div class="hint">無記錄音量嘅歌曲會跟呢個數值；歌庫嘅歌曲可個別設定，歌單唔儲音量</div>
+    </div>
+    <div class="toggle-row" style="margin-top:4px">
+      <div class="toggle-label">
+        <span>重置全部 Queue 至預設音量</span>
+        <small>將所有房間現有 Queue 每首歌即時改為預設音量</small>
+      </div>
+      <button class="btn btn-secondary" id="reset-vol-btn" onclick="resetAllVolumes()">重置</button>
+    </div>
+  </div>
+
   <!-- 歌庫資料 -->
   <div class="card">
     <div class="card-title">歌庫資料</div>
     <div class="db-info" id="db-info">載入中…</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn btn-secondary" onclick="exportCatalog()">📤 匯出</button>
+      <label class="btn btn-secondary" style="cursor:pointer">
+        📥 匯入
+        <input type="file" accept=".json" onchange="importCatalog(this)" style="display:none">
+      </label>
+      <button class="btn btn-secondary" style="color:var(--accent);border-color:rgba(233,69,96,0.4)" onclick="clearCatalog()">🗑 清除歌庫</button>
+    </div>
+  </div>
+
+  <!-- 更新 -->
+  <div class="card">
+    <div class="card-title">更新</div>
+    <div class="toggle-row">
+      <div class="toggle-label">
+        <span>🔄 啟動時自動檢查更新</span>
+        <small>連接 GitHub 查詢最新版本，有更新時提示下載連結</small>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="auto-update-toggle" onchange="hideSaveMsg()" />
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div id="update-status" style="font-size:12px;color:var(--muted);padding:4px 0 2px"></div>
   </div>
 
   <!-- 儲存 -->
@@ -138,6 +182,11 @@
     <span class="save-msg" id="save-msg">✓ 已儲存</span>
     <button class="btn btn-secondary" onclick="location.href='/'">取消</button>
     <button class="btn btn-accent" id="save-btn" onclick="saveSettings()">儲存設定</button>
+  </div>
+
+  <div style="text-align:center;padding:12px 0 4px;font-size:12px;color:var(--muted)">
+    由 <a href="https://hkmilestone.com" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline">Milestone Technology</a> 開發 &nbsp;·&nbsp;
+    <a href="https://hkmilestone.com/karaqueue" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline">KaraQueue 產品頁</a>
   </div>
 
 </div>
@@ -179,6 +228,13 @@ async function loadSettings() {
     }
 
     document.getElementById('auto-classify-toggle').checked = !!d.autoClassify;
+
+    const dv = d.defaultVolume ?? 70;
+    document.getElementById('default-vol-slider').value = dv;
+    document.getElementById('default-vol-label').textContent = dv + '%';
+
+    document.getElementById('auto-update-toggle').checked = !!d.autoUpdate;
+    loadUpdateStatus();
 
     const dbInfo = document.getElementById('db-info');
     if (d.songsDbPath) {
@@ -222,6 +278,14 @@ async function testKey() {
 }
 
 function onToggleChange() { hideSaveMsg(); }
+
+async function resetAllVolumes() {
+  const btn = document.getElementById('reset-vol-btn');
+  btn.disabled = true; btn.textContent = '重置中…';
+  await fetch('/api/queue/reset-volumes', { method: 'POST' });
+  btn.disabled = false; btn.textContent = '✓ 已重置';
+  setTimeout(() => { btn.textContent = '重置'; }, 2000);
+}
 function hideSaveMsg() { document.getElementById('save-msg').classList.remove('show'); }
 
 async function saveSettings() {
@@ -230,7 +294,9 @@ async function saveSettings() {
   const apiKey = document.getElementById('api-key-input').value.trim();
   const provider = document.getElementById('provider-select').value;
   const autoClassify = document.getElementById('auto-classify-toggle').checked;
-  const body = { autoClassify, provider };
+  const defaultVolume = parseInt(document.getElementById('default-vol-slider').value);
+  const autoUpdate = document.getElementById('auto-update-toggle').checked;
+  const body = { autoClassify, provider, defaultVolume, autoUpdate };
   if (apiKey) body.apiKey = apiKey;
   try {
     await fetch('/api/settings', {
@@ -244,6 +310,49 @@ async function saveSettings() {
     setTimeout(() => msg.classList.remove('show'), 3000);
   } catch (e) { alert('儲存失敗：' + e.message); }
   btn.disabled = false; btn.textContent = '儲存設定';
+}
+
+async function loadUpdateStatus() {
+  const el = document.getElementById('update-status');
+  try {
+    const d = await fetch('/api/update-check').then(r => r.json());
+    if (d.hasUpdate) {
+      el.innerHTML = `目前版本：v${d.currentVersion} &nbsp;→&nbsp; <a href="${d.downloadUrl}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">v${d.latestVersion} 有新版本，點此下載 ↗</a>`;
+    } else if (d.latestVersion) {
+      el.textContent = `目前版本：v${d.currentVersion}（已是最新）`;
+    } else {
+      el.textContent = `目前版本：v${d.currentVersion}`;
+    }
+  } catch { el.textContent = '無法取得版本資訊'; }
+}
+
+async function exportCatalog() {
+  const data = await fetch('/api/catalog').then(r => r.json());
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `karaqueue-catalog-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+
+async function importCatalog(input) {
+  const file = input.files[0];
+  if (!file) return;
+  let data;
+  try { data = JSON.parse(await file.text()); } catch { alert('檔案格式錯誤'); return; }
+  if (!Array.isArray(data)) { alert('格式錯誤：需要 JSON 陣列'); return; }
+  const r = await fetch('/api/catalog/import', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(x => x.json());
+  if (r.ok) { alert(`匯入成功：${r.count} 首歌`); await loadSettings(); }
+  input.value = '';
+}
+
+async function clearCatalog() {
+  if (!confirm('確定清除所有歌庫資料？此操作不可還原。')) return;
+  await fetch('/api/catalog', { method: 'DELETE' });
+  await loadSettings();
 }
 
 loadSettings();
