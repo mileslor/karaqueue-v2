@@ -138,10 +138,11 @@ function startTV() {
   if (!serverUrl) return showErr('請輸入伺服器地址');
   const sel = document.getElementById('room-select');
   const roomId = sel.value || 'default';
+  const roomName = sel.selectedOptions[0]?.textContent || roomId;
   document.getElementById('start-btn').disabled = true;
   document.getElementById('start-btn').textContent = '連接中…';
   showErr('');
-  api.startTV({ serverUrl, roomId });
+  api.startTV({ serverUrl, roomId, roomName });
 }
 
 api.onError(msg => {

@@ -1,6 +1,8 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const http = require('http');
 const path = require('path');
+
+Menu.setApplicationMenu(null);
 
 let proxyServer = null;
 let setupWin = null;
@@ -9,9 +11,10 @@ let tvWin = null;
 function createSetupWindow() {
   setupWin = new BrowserWindow({
     width: 520,
-    height: 480,
+    height: 560,
+    useContentSize: true,
     resizable: false,
-    titleBarStyle: 'hiddenInset',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -33,7 +36,6 @@ app.on('activate', () => {
   if (!setupWin && !tvWin) createSetupWindow();
 });
 
-// Fetch rooms from server (in main process to avoid CORS issues)
 ipcMain.handle('fetch-rooms', async (_e, serverUrl) => {
   try {
     const res = await fetch(`${serverUrl.replace(/\/$/, '')}/api/rooms`);
@@ -58,7 +60,7 @@ ipcMain.handle('create-room', async (_e, { serverUrl, name, color }) => {
   }
 });
 
-ipcMain.on('start-tv', (event, { serverUrl, roomId }) => {
+ipcMain.on('start-tv', (event, { serverUrl, roomId, roomName }) => {
   const target = serverUrl.replace(/\/$/, '');
 
   if (proxyServer) {
@@ -66,7 +68,6 @@ ipcMain.on('start-tv', (event, { serverUrl, roomId }) => {
     proxyServer = null;
   }
 
-  // Lazy-load http-proxy so startup stays fast
   let httpProxy;
   try {
     httpProxy = require('http-proxy');
@@ -105,6 +106,53 @@ ipcMain.on('start-tv', (event, { serverUrl, roomId }) => {
     });
 
     tvWin.loadURL(tvUrl);
+
+    // ESC to exit TV and return to setup
+    tvWin.webContents.on('before-input-event', (_ev, input) => {
+      if (input.type === 'keyDown' && input.key === 'Escape') {
+        tvWin.close();
+      }
+    });
+
+    // Inject info overlay after page loads
+    tvWin.webContents.on('did-finish-load', () => {
+      const displayName = roomName || roomId || 'default';
+      const displayServer = target.replace(/^https?:\/\//, '');
+      tvWin.webContents.executeJavaScript(`
+        (function() {
+          const bar = document.createElement('div');
+          bar.id = '_kq_bar';
+          bar.style.cssText = [
+            'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:2147483647',
+            'background:rgba(0,0,0,0.72)', 'backdrop-filter:blur(4px)',
+            'color:#fff', 'font-family:system-ui,sans-serif', 'font-size:13px',
+            'padding:8px 18px', 'display:flex', 'justify-content:space-between',
+            'align-items:center', 'transition:opacity .4s',
+          ].join(';');
+          bar.innerHTML =
+            '<span>🎤 KaraQueue TV &nbsp;·&nbsp; 房間：<b>${displayName}</b> &nbsp;·&nbsp; 伺服器：${displayServer}</span>' +
+            '<span style="opacity:.55;font-size:11px">按 ESC 退出 &nbsp;|&nbsp; 按 I 顯示/隱藏資訊</span>';
+          document.body.appendChild(bar);
+          // Auto-hide after 6 seconds
+          setTimeout(() => {
+            bar.style.opacity = '0';
+            setTimeout(() => { bar.style.pointerEvents = 'none'; }, 400);
+          }, 6000);
+          // Toggle with "I" key
+          document.addEventListener('keydown', function(e) {
+            if (e.key === 'i' || e.key === 'I') {
+              if (bar.style.opacity === '0' || bar.style.opacity === '') {
+                bar.style.opacity = '1';
+                bar.style.pointerEvents = 'auto';
+              } else {
+                bar.style.opacity = '0';
+                bar.style.pointerEvents = 'none';
+              }
+            }
+          });
+        })();
+      `).catch(() => {});
+    });
 
     tvWin.on('closed', () => {
       tvWin = null;
