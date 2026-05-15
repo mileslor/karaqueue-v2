@@ -129,10 +129,17 @@
   </div>
   <div class="ctrl-grid">
     <button class="ctrl-btn" onclick="socket.emit('replay')">🔄<span>重播</span></button>
-    <button class="ctrl-btn" onclick="socket.emit('stop')">⏹<span>停止</span></button>
-    <button class="ctrl-btn" onclick="socket.emit('prev')">⏮<span>上一首</span></button>
-    <button class="ctrl-btn" onclick="socket.emit('next')">⏭<span>下一首</span></button>
+    <button class="ctrl-btn" onclick="socket.emit('next')"><span style="font-size:22px;font-weight:700">停</span><span>跳過呢首</span></button>
+    <button class="ctrl-btn" id="lyr-btn" onclick="toggleLyrics()" style="grid-column:span 2">字幕<span id="lyr-status">開啟中</span></button>
     <button class="ctrl-btn danger" onclick="if(confirm('清空Queue？'))socket.emit('clear')">🗑<span>清空 Queue</span></button>
+  </div>
+  <div style="margin-top:12px;background:var(--panel);border-radius:14px;padding:14px;border:1px solid var(--border)">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">字幕時間（全體）</div>
+    <div style="display:flex;align-items:center;gap:10px;justify-content:center">
+      <button class="ctrl-btn" style="flex:1;padding:14px" onclick="socket.emit('global-lyrics-offset',{delta:-0.5})">◀<span>遲0.5s</span></button>
+      <span id="glo-label" style="font-size:15px;color:var(--accent);min-width:44px;text-align:center">0.0s</span>
+      <button class="ctrl-btn" style="flex:1;padding:14px" onclick="socket.emit('global-lyrics-offset',{delta:0.5})">▶<span>早0.5s</span></button>
+    </div>
   </div>
   <div style="margin-top:16px;background:var(--panel);border-radius:14px;padding:16px;border:1px solid var(--border)">
     <div style="font-size:12px;color:var(--muted);margin-bottom:10px">🔊 音量控制</div>
@@ -166,12 +173,20 @@ socket.on('state', data => {
   if (currentIndex >= 0 && queue[currentIndex]) {
     syncVolSlider(queue[currentIndex].volume ?? 70);
   }
+  const glo = document.getElementById('glo-label');
+  if (glo) glo.textContent = ((data.globalLyricsOffset || 0).toFixed(1)) + 's';
+  updateLyricsBtn();
 });
 socket.on('play', data => {
   updateControls();
   if (typeof data === 'object' && data.volume != null) syncVolSlider(data.volume);
+  updateLyricsBtn();
 });
 socket.on('volume', val => syncVolSlider(val));
+socket.on('global-lyrics-offset', val => {
+  const glo = document.getElementById('glo-label');
+  if (glo) glo.textContent = (val || 0).toFixed(1) + 's';
+});
 
 function syncVolSlider(val) {
   const s = document.getElementById('vol-slider');
@@ -294,12 +309,16 @@ function renderQueue() {
             <div class="queue-title">${esc(item.title)}</div>
             <div class="queue-by">by ${esc(item.addedBy || 'Guest')}</div>
           </div>
-          <div style="display:flex;gap:4px;align-items:center;flex-shrink:0">
+          <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
             <button class="queue-del" onclick="socket.emit('song-volume',{idx:${i},delta:-10})" style="font-size:14px">🔉</button>
             <span style="font-size:11px;color:var(--muted);min-width:28px;text-align:center">${item.volume??70}%</span>
             <button class="queue-del" onclick="socket.emit('song-volume',{idx:${i},delta:10})" style="font-size:14px">🔊</button>
             <button class="queue-del" onclick="socket.emit('replay')" style="font-size:12px">🔄</button>
-            <button class="queue-del" onclick="socket.emit('skip')" style="font-size:12px">⏭</button>
+            <button class="queue-del" onclick="socket.emit('next')" style="font-size:12px;font-weight:700">停</button>
+            <button class="queue-del" onclick="socket.emit('toggle-lyrics')" style="font-size:11px;opacity:${item.lyricsEnabled===false?'0.35':'1'}">字幕</button>
+            <button class="queue-del" onclick="socket.emit('lyrics-offset',{idx:${i},delta:-0.5})" style="font-size:10px">◀</button>
+            <span style="font-size:10px;color:var(--muted);min-width:26px;text-align:center">${(item.lyricsOffset||0).toFixed(1)}s</span>
+            <button class="queue-del" onclick="socket.emit('lyrics-offset',{idx:${i},delta:0.5})" style="font-size:10px">▶</button>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;padding:4px 10px;color:var(--muted);font-size:11px">
@@ -338,6 +357,19 @@ function showToast(msg) {
 function setVol(val) {
   document.getElementById('vol-label').textContent = val + '%';
   socket.emit('volume', Number(val));
+}
+
+function toggleLyrics() { socket.emit('toggle-lyrics'); }
+
+function updateLyricsBtn() {
+  const btn = document.getElementById('lyr-btn');
+  const status = document.getElementById('lyr-status');
+  if (!btn || !status) return;
+  const song = currentIndex >= 0 ? queue[currentIndex] : null;
+  const on = !song || song.lyricsEnabled !== false;
+  btn.style.opacity = on ? '1' : '0.4';
+  btn.style.borderColor = on ? 'var(--accent)' : '';
+  status.textContent = on ? '開啟中' : '已關閉';
 }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }

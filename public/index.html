@@ -219,13 +219,18 @@
   </div>
   <div class="ctrl-group">
     <button class="ctrl-btn" onclick="emit('replay')" title="重播">🔄</button>
-    <button class="ctrl-btn" onclick="emit('stop')" title="停止">⏹</button>
-    <button class="ctrl-btn" onclick="emit('prev')">⏮</button>
-    <button class="ctrl-btn" onclick="emit('next')">⏭</button>
+    <button class="ctrl-btn" onclick="emit('next')" title="跳過呢首">停</button>
+    <button class="ctrl-btn" id="lyrics-btn" onclick="toggleLyrics()" title="字幕開/關">字幕</button>
     <span style="display:flex;align-items:center;gap:6px;padding:0 4px">
       <span style="font-size:14px">🔊</span>
       <input type="range" id="vol-slider" min="0" max="100" value="70" disabled style="width:90px;opacity:0.45;cursor:default;pointer-events:none" />
       <span id="vol-label" style="font-size:12px;color:var(--muted);width:28px">100</span>
+    </span>
+    <span style="display:flex;align-items:center;gap:4px;padding:0 4px;border:1px solid var(--border);border-radius:8px">
+      <span style="font-size:11px;color:var(--muted)">歌詞</span>
+      <button class="ctrl-btn" style="padding:4px 7px;border:none" onclick="emit('global-lyrics-offset',{delta:-0.5})" title="全體歌詞遲0.5秒">◀</button>
+      <span id="glo-label" style="font-size:11px;color:var(--muted);min-width:30px;text-align:center">0.0s</span>
+      <button class="ctrl-btn" style="padding:4px 7px;border:none" onclick="emit('global-lyrics-offset',{delta:0.5})" title="全體歌詞早0.5秒">▶</button>
     </span>
     <button class="ctrl-btn" id="auto-classify-btn" onclick="toggleAutoClassify()" title="自動收錄歌庫">🎵</button>
     <button class="ctrl-btn" id="shuffle-btn" onclick="emit('toggle-shuffle')" title="隨機播放">🔀</button>
@@ -371,7 +376,81 @@ socket.on('state', data => {
     shuffleBtn.style.color = data.shuffleMode ? 'var(--accent)' : '';
     shuffleBtn.title = data.shuffleMode ? '隨機播放（開啟中，點擊關閉）' : '隨機播放（關閉中，點擊開啟）';
   }
+  const glo = document.getElementById('glo-label');
+  if (glo) glo.textContent = ((data.globalLyricsOffset || 0).toFixed(1)) + 's';
+  updateLyricsBtn();
 });
+
+socket.on('global-lyrics-offset', val => {
+  const glo = document.getElementById('glo-label');
+  if (glo) glo.textContent = (val || 0).toFixed(1) + 's';
+});
+
+function toggleLyrics() { emit('toggle-lyrics'); }
+
+// ── Lyrics editor ─────────────────────────────────────────────────────
+let _lyrEditVideoId = '', _lyrEditTitle = '';
+
+async function openLyricsEditor(videoId, title) {
+  _lyrEditVideoId = videoId;
+  _lyrEditTitle = title;
+  document.getElementById('lyrics-modal-title').textContent = `歌詞編輯：${title.slice(0, 40)}`;
+  document.getElementById('lyrics-modal-msg').textContent = '載入中…';
+  document.getElementById('lyrics-editor').value = '';
+  document.getElementById('lyrics-modal').classList.add('open');
+  try {
+    const d = await fetch(`/api/lyrics?videoId=${encodeURIComponent(videoId)}&title=${encodeURIComponent(title)}`).then(r => r.json());
+    document.getElementById('lyrics-editor').value = d.found ? (d.lrc || '') : '';
+    document.getElementById('lyrics-modal-msg').textContent = d.found ? '✅ 已載入歌詞' : '⚠️ 未有緩存歌詞，可試試重新搜尋';
+  } catch {
+    document.getElementById('lyrics-modal-msg').textContent = '❌ 載入失敗';
+  }
+}
+
+function closeLyricsModal() {
+  document.getElementById('lyrics-modal').classList.remove('open');
+}
+
+function saveLyrics() {
+  const lrc = document.getElementById('lyrics-editor').value.trim();
+  emit('edit-lyrics', { videoId: _lyrEditVideoId, lrc: lrc || null });
+  document.getElementById('lyrics-modal-msg').textContent = '✅ 已儲存並更新 TV';
+}
+
+function clearLyrics() {
+  document.getElementById('lyrics-editor').value = '';
+  emit('edit-lyrics', { videoId: _lyrEditVideoId, lrc: null });
+  document.getElementById('lyrics-modal-msg').textContent = '🗑 已清除歌詞';
+}
+
+async function refreshLyrics() {
+  document.getElementById('lyrics-modal-msg').textContent = '🔍 搜尋中…';
+  document.getElementById('lyrics-editor').value = '';
+  emit('refresh-lyrics', { videoId: _lyrEditVideoId, title: _lyrEditTitle });
+}
+
+socket.on('lyrics-refreshing', ({ videoId }) => {
+  if (videoId === _lyrEditVideoId) {
+    document.getElementById('lyrics-modal-msg').textContent = '🔍 搜尋中…';
+  }
+});
+
+socket.on('lyrics-updated', ({ videoId, lrc }) => {
+  if (videoId === _lyrEditVideoId && document.getElementById('lyrics-modal').classList.contains('open')) {
+    document.getElementById('lyrics-editor').value = lrc || '';
+    document.getElementById('lyrics-modal-msg').textContent = lrc ? '✅ 搜尋完成，已更新 TV' : '❌ 搜尋唔到歌詞';
+  }
+});
+
+function updateLyricsBtn() {
+  const btn = document.getElementById('lyrics-btn');
+  if (!btn) return;
+  const song = currentIndex >= 0 ? queue[currentIndex] : null;
+  const on = !song || song.lyricsEnabled !== false;
+  btn.style.opacity = on ? '1' : '0.35';
+  btn.style.borderColor = on ? 'var(--accent)' : '';
+  btn.title = on ? '字幕開（點擊關閉）' : '字幕關（點擊開啟）';
+}
 
 socket.on('play', data => {
   if (currentIndex >= 0 && queue[currentIndex]) {
@@ -406,6 +485,11 @@ function queueItemHtml(item, i, badge, badgeClass, clickable) {
         <span style="font-size:11px;color:var(--muted);min-width:28px;text-align:center">${vol}%</span>
         <button class="queue-act" onclick="${stopProp}emit('song-volume',{idx:${i},delta:10})">🔊</button>
         ${badge === '播放中' ? `
+          <button class="queue-act lyr-toggle" onclick="emit('toggle-lyrics')" title="${item.lyricsEnabled === false ? '開歌詞' : '關歌詞'}" style="opacity:${item.lyricsEnabled === false ? '0.35' : '1'}">🎵</button>
+          <button class="queue-act" onclick="emit('lyrics-offset',{idx:${i},delta:-0.5})" title="歌詞遲0.5秒" style="font-size:10px">◀</button>
+          <span style="font-size:10px;color:var(--muted);min-width:28px;text-align:center">${(item.lyricsOffset||0).toFixed(1)}s</span>
+          <button class="queue-act" onclick="emit('lyrics-offset',{idx:${i},delta:0.5})" title="歌詞早0.5秒" style="font-size:10px">▶</button>
+          <button class="queue-act" onclick="openLyricsEditor('${item.videoId}','${item.title.replace(/'/g,"\\'")}')" title="編輯歌詞" style="font-size:11px">✏️</button>
           <button class="queue-act" onclick="emit('replay')">🔄</button>
           <button class="queue-act" onclick="emit('skip')">⏭</button>
           <button class="queue-act" onclick="addToCatalog(${i})" title="加入歌庫">📀</button>
@@ -1384,6 +1468,22 @@ function pmAddToCurrentPl(jsonStr, btn) {
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="pl-btn" onclick="document.getElementById('manual-modal').classList.remove('open')">取消</button>
       <button id="manual-submit-btn" class="pl-btn" onclick="submitManual()" style="background:var(--accent);border-color:var(--accent);color:#fff">加入歌庫</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lyrics Editor Modal -->
+<div class="modal-overlay" id="lyrics-modal" onclick="if(event.target===this)closeLyricsModal()">
+  <div class="pl-modal" style="min-width:340px;max-width:680px;width:90vw;max-height:88vh;display:flex;flex-direction:column;gap:10px">
+    <h3 style="font-size:14px;color:var(--muted)" id="lyrics-modal-title">歌詞編輯</h3>
+    <textarea id="lyrics-editor" style="flex:1;min-height:300px;max-height:55vh;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:monospace;padding:10px;resize:vertical;outline:none;line-height:1.6" placeholder="[mm:ss.xx] 歌詞..."></textarea>
+    <div style="font-size:11px;color:var(--muted)">格式：每行 [分:秒.毫秒] 歌詞，例如 [01:23.45] 青春告别式</div>
+    <div id="lyrics-modal-msg" style="font-size:12px;color:var(--accent);min-height:16px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="pl-btn" onclick="refreshLyrics()" style="flex:1">🔍 重新搜尋</button>
+      <button class="pl-btn" onclick="saveLyrics()" style="flex:1;background:var(--accent);border-color:var(--accent);color:#fff">💾 儲存</button>
+      <button class="pl-btn" onclick="clearLyrics()" style="flex:1;color:var(--accent)">🗑 清除</button>
+      <button class="pl-btn" onclick="closeLyricsModal()" style="flex:1">關閉</button>
     </div>
   </div>
 </div>

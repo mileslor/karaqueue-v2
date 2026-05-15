@@ -28,6 +28,36 @@
   #now-bar .label { font-size: 12px; color: #aaa; }
   #now-bar .title { font-size: 18px; font-weight: 600; }
   #now-bar .next { margin-left: auto; font-size: 13px; color: #aaa; max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Lyrics overlay */
+  #lyrics-panel {
+    position: fixed; bottom: 72px; left: 0; right: 0;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 8px; padding: 0 10%; pointer-events: none;
+    transition: opacity .3s;
+  }
+  #lyrics-panel.hidden { opacity: 0; }
+  .lyric-line {
+    font-family: system-ui, 'PingFang TC', 'Noto Sans TC', sans-serif;
+    font-weight: 700; text-align: center;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.8);
+    line-height: 1.3; word-break: break-all;
+    background: rgba(0,0,0,0.45); border-radius: 8px; padding: 4px 20px;
+    transition: opacity .25s, transform .25s;
+  }
+  .lyric-line.current {
+    font-size: 38px; color: #ffe566;
+    opacity: 1; transform: scale(1);
+  }
+  .lyric-line.next {
+    font-size: 26px; color: rgba(255,255,255,0.75);
+    opacity: 0.85; transform: scale(0.97);
+  }
+  #lyrics-status {
+    position: fixed; bottom: 112px; right: 24px;
+    font-size: 12px; color: rgba(255,255,255,0.45); font-family: system-ui;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -39,6 +69,12 @@
 </div>
 
 <div id="player"></div>
+
+<div id="lyrics-panel" class="hidden">
+  <div class="lyric-line current" id="lyric-current"></div>
+  <div class="lyric-line next" id="lyric-next"></div>
+</div>
+<div id="lyrics-status"></div>
 
 <div id="now-bar">
   <div>
@@ -53,15 +89,91 @@
 const socket = io();
 const _roomId = new URLSearchParams(location.search).get('room') || 'default';
 socket.on('connect', () => socket.emit('join-room', { roomId: _roomId }));
-let player = null;
-let ytReady = false;
-let playerReady = false;
-let pendingVideoId = null;
-let hasVideo = false;
-let queue = [], currentIndex = -1;
-let barTimer = null;
 
-// 靜音初始化 player（browser 允許靜音 autoplay，之後 unmute 就有聲）
+let player = null, ytReady = false, playerReady = false;
+let pendingVideoId = null, hasVideo = false;
+let queue = [], currentIndex = -1;
+let barTimer = null, loopData = null;
+
+// ── Lyrics state ──────────────────────────────────────────────────────
+let lyricsLines = [];       // [{time, text}]
+let lyricsEnabled = true;   // from queue item
+let lyricsOffset = 0;       // per-song offset (seconds)
+let globalOffset = 0;       // global offset (seconds)
+let syncTimer = null;
+let lyricsFound = false;
+
+function parseLrc(lrc) {
+  const lines = [];
+  for (const raw of lrc.split('\n')) {
+    const m = raw.match(/\[(\d+):(\d+\.\d+)\](.*)/);
+    if (m) {
+      const t = parseInt(m[1]) * 60 + parseFloat(m[2]);
+      const text = m[3].trim();
+      if (text) lines.push({ time: t, text });
+    }
+  }
+  return lines.sort((a, b) => a.time - b.time);
+}
+
+function updateLyricsDisplay() {
+  if (!lyricsFound || !lyricsEnabled || !playerReady || !player) return;
+  const cur = player.getCurrentTime() - lyricsOffset - globalOffset;
+  const nextIdx = lyricsLines.findIndex(l => l.time > cur);
+  const curIdx = nextIdx === -1 ? lyricsLines.length - 1 : nextIdx - 1;
+
+  const curLine = curIdx >= 0 ? lyricsLines[curIdx].text : '';
+  const nxtLine = nextIdx >= 0 && nextIdx < lyricsLines.length ? lyricsLines[nextIdx].text : '';
+
+  document.getElementById('lyric-current').textContent = curLine;
+  document.getElementById('lyric-next').textContent = nxtLine;
+}
+
+function startSync() {
+  stopSync();
+  syncTimer = setInterval(updateLyricsDisplay, 100);
+}
+function stopSync() {
+  if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+}
+
+async function fetchAndShowLyrics(videoId, title) {
+  lyricsFound = false;
+  lyricsLines = [];
+  document.getElementById('lyrics-panel').classList.add('hidden');
+  document.getElementById('lyrics-status').textContent = '🔍';
+
+  try {
+    const r = await fetch(`/api/lyrics?videoId=${encodeURIComponent(videoId)}&title=${encodeURIComponent(title)}`);
+    const d = await r.json();
+    if (d.found && d.lrc) {
+      lyricsLines = parseLrc(d.lrc);
+      lyricsFound = true;
+      document.getElementById('lyrics-status').textContent = '';
+      if (lyricsEnabled) {
+        document.getElementById('lyrics-panel').classList.remove('hidden');
+        startSync();
+      }
+    } else {
+      document.getElementById('lyrics-status').textContent = '';
+    }
+  } catch (_) {
+    document.getElementById('lyrics-status').textContent = '';
+  }
+}
+
+function applyLyricsVisibility() {
+  const panel = document.getElementById('lyrics-panel');
+  if (lyricsFound && lyricsEnabled) {
+    panel.classList.remove('hidden');
+    startSync();
+  } else {
+    panel.classList.add('hidden');
+    stopSync();
+  }
+}
+
+// ── YouTube Player ────────────────────────────────────────────────────
 window.onYouTubeIframeAPIReady = () => {
   ytReady = true;
   player = new YT.Player('player', {
@@ -113,16 +225,24 @@ function updateBar() {
   document.getElementById('next-title').textContent = next ? `下一首：${next.title}` : '';
 }
 
-let loopData = null;
-
+// ── Socket events ─────────────────────────────────────────────────────
 socket.on('state', data => {
   queue = data.queue;
   currentIndex = data.currentIndex;
+  globalOffset = data.globalLyricsOffset || 0;
   updateBar();
-  if (!hasVideo && currentIndex >= 0 && queue[currentIndex]) {
-    const item = queue[currentIndex];
-    loopData = { videoId: item.videoId, volume: item.volume ?? 70 };
-    loadVideo(item.videoId);
+  // sync lyricsEnabled/offset from current song
+  const song = currentIndex >= 0 ? queue[currentIndex] : null;
+  const newEnabled = song ? (song.lyricsEnabled !== false) : true;
+  const newOffset = song ? (song.lyricsOffset || 0) : 0;
+  if (newEnabled !== lyricsEnabled || newOffset !== lyricsOffset) {
+    lyricsEnabled = newEnabled;
+    lyricsOffset = newOffset;
+    applyLyricsVisibility();
+  }
+  if (!hasVideo && currentIndex >= 0 && song) {
+    loopData = { videoId: song.videoId, volume: song.volume ?? 70 };
+    loadVideo(song.videoId);
   }
 });
 
@@ -130,10 +250,54 @@ socket.on('play', data => {
   const videoId = typeof data === 'string' ? data : data.videoId;
   const volume = typeof data === 'object' ? (data.volume ?? 70) : 70;
   loopData = { videoId, volume };
+  stopSync();
+  lyricsFound = false;
+  lyricsEnabled = true;
+  lyricsOffset = 0;
+  document.getElementById('lyrics-panel').classList.add('hidden');
+  document.getElementById('lyric-current').textContent = '';
+  document.getElementById('lyric-next').textContent = '';
+
   loadVideo(videoId);
   if (player) player.setVolume(volume);
   updateBar();
   showBar();
+
+  // get lyricsEnabled/offset from queue
+  const song = currentIndex >= 0 ? queue[currentIndex] : null;
+  if (song) {
+    lyricsEnabled = song.lyricsEnabled !== false;
+    lyricsOffset = song.lyricsOffset || 0;
+    fetchAndShowLyrics(videoId, song.title || '');
+  } else {
+    // title may come via data
+    const title = typeof data === 'object' ? (data.title || '') : '';
+    fetchAndShowLyrics(videoId, title);
+  }
+});
+
+socket.on('global-lyrics-offset', val => {
+  globalOffset = val;
+});
+
+socket.on('lyrics-updated', ({ videoId, lrc }) => {
+  const curSong = currentIndex >= 0 ? queue[currentIndex] : null;
+  if (!curSong || curSong.videoId !== videoId) return;
+  stopSync();
+  if (lrc) {
+    lyricsLines = parseLrc(lrc);
+    lyricsFound = true;
+    if (lyricsEnabled) {
+      document.getElementById('lyrics-panel').classList.remove('hidden');
+      startSync();
+    }
+  } else {
+    lyricsLines = [];
+    lyricsFound = false;
+    document.getElementById('lyrics-panel').classList.add('hidden');
+    document.getElementById('lyric-current').textContent = '';
+    document.getElementById('lyric-next').textContent = '';
+  }
 });
 
 socket.on('loop', () => {
@@ -145,6 +309,9 @@ socket.on('loop', () => {
 
 socket.on('stop', () => {
   hasVideo = false;
+  stopSync();
+  lyricsFound = false;
+  document.getElementById('lyrics-panel').classList.add('hidden');
   if (playerReady) player.stopVideo();
   document.getElementById('overlay').classList.remove('hidden');
 });

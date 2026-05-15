@@ -5,6 +5,8 @@ const QRCode = require('qrcode');
 const { networkInterfaces, hostname } = require('os');
 const { join } = require('path');
 const fs = require('fs');
+const { Converter } = require('opencc-js');
+const s2t = Converter({ from: 'cn', to: 'tw' });
 
 // Load .env
 const envFile = join(__dirname, '.env');
@@ -62,6 +64,44 @@ function loadSongsDb() {
   return [];
 }
 function saveSongsDb(db) { fs.writeFileSync(songsDbPath, JSON.stringify(db, null, 2)); }
+
+// ─── Lyrics cache ──────────────────────────────────────────────────────
+const lyricsCachePath = join(__dirname, 'lyrics-cache.json');
+function loadLyricsCache() {
+  try { if (fs.existsSync(lyricsCachePath)) return JSON.parse(fs.readFileSync(lyricsCachePath, 'utf-8')); } catch (_) {}
+  return {};
+}
+function saveLyricsCache(cache) { fs.writeFileSync(lyricsCachePath, JSON.stringify(cache)); }
+
+function parseTitleForSearch(title) {
+  const cleaned = title.replace(/\s*[|｜]\s*(伴奏|純音樂|Karaoke|KTV|MV|Official|官方|backing\s*track|instrumental)[^|｜]*/gi, '').trim();
+  const parts = cleaned.split(/\s+[-–—]\s+/);
+  if (parts.length >= 2) return { artist: parts[0].trim(), track: parts[1].trim() };
+  return { artist: '', track: cleaned };
+}
+
+async function fetchNeteaseLyrics(title) {
+  const { artist, track } = parseTitleForSearch(title);
+  const query = encodeURIComponent(`${artist} ${track}`.trim());
+  const sr = await fetch(`http://music.163.com/api/search/get?s=${query}&type=1&limit=3`, {
+    headers: { 'Referer': 'http://music.163.com/', 'User-Agent': 'Mozilla/5.0' },
+    signal: AbortSignal.timeout(8000)
+  });
+  if (!sr.ok) return null;
+  const sd = await sr.json();
+  const songId = sd?.result?.songs?.[0]?.id;
+  if (!songId) return null;
+
+  const lr = await fetch(`http://music.163.com/api/song/lyric?id=${songId}&lv=1&kv=1&tv=-1`, {
+    headers: { 'Referer': 'http://music.163.com/', 'User-Agent': 'Mozilla/5.0' },
+    signal: AbortSignal.timeout(8000)
+  });
+  if (!lr.ok) return null;
+  const ld = await lr.json();
+  const lrc = ld?.lrc?.lyric || '';
+  if (!lrc || lrc.length < 20 || !lrc.includes('[')) return null;
+  return s2t(lrc);
+}
 
 const AI_SYSTEM_PROMPT = `你係歌曲分類系統，只輸出一行JSON，不加任何說明。
 
@@ -238,7 +278,7 @@ function createRoom(name, fixedId, color) {
     color: color || ROOM_COLORS[_colorIdx++ % ROOM_COLORS.length],
     queue: [], currentIndex: -1,
     videoEndedTimer: null, playStartTime: null, playingVideo: null,
-    shuffleMode: false, createdAt: Date.now()
+    shuffleMode: false, globalLyricsOffset: 0, createdAt: Date.now()
   };
   rooms.set(id, room);
   return room;
@@ -270,7 +310,7 @@ function checkPlayTime(room) {
 }
 
 function emitRoomState(room) {
-  io.to(room.id).emit('state', { queue: room.queue, currentIndex: room.currentIndex, shuffleMode: room.shuffleMode });
+  io.to(room.id).emit('state', { queue: room.queue, currentIndex: room.currentIndex, shuffleMode: room.shuffleMode, globalLyricsOffset: room.globalLyricsOffset || 0 });
 }
 
 app.get('/api/qr', async (req, res) => {
@@ -485,6 +525,24 @@ app.post('/api/settings/test-key', async (req, res) => {
   }
 });
 
+app.get('/api/lyrics', async (req, res) => {
+  const { videoId, title } = req.query;
+  if (!videoId || !/^[\w-]{11}$/.test(videoId)) return res.json({ found: false });
+  const cache = loadLyricsCache();
+  if (videoId in cache) {
+    return res.json(cache[videoId] ? { found: true, lrc: cache[videoId] } : { found: false });
+  }
+  try {
+    const lrc = await fetchNeteaseLyrics(title || '');
+    cache[videoId] = lrc || null;
+    saveLyricsCache(cache);
+    return res.json(lrc ? { found: true, lrc } : { found: false });
+  } catch (e) {
+    console.error('[Lyrics]', e.message);
+    return res.json({ found: false });
+  }
+});
+
 app.post('/api/queue/reset-volumes', (_req, res) => {
   const vol = defaultVol();
   for (const room of rooms.values()) {
@@ -608,7 +666,11 @@ io.on('connection', socket => {
   socket.on('add', video => {
     if (!video?.videoId || !/^[\w-]{11}$/.test(video.videoId)) return;
     const wasEmpty = room.currentIndex === -1;
-    room.queue.push({ ...video, addedBy: video.addedBy || 'Guest', volume: video.volume ?? defaultVol() });
+    const catalogEntry = loadSongsDb().find(s => s.ytId === video.videoId);
+    const lyricsExtra = {};
+    if (catalogEntry?.lyricsEnabled === false) lyricsExtra.lyricsEnabled = false;
+    if (catalogEntry?.lyricsOffset) lyricsExtra.lyricsOffset = catalogEntry.lyricsOffset;
+    room.queue.push({ ...video, addedBy: video.addedBy || 'Guest', volume: video.volume ?? defaultVol(), ...lyricsExtra });
     if (room.currentIndex === -1) room.currentIndex = 0;
     emitRoomState(room);
     if (wasEmpty) emitPlay(room, room.queue[room.currentIndex]);
@@ -618,7 +680,11 @@ io.on('connection', socket => {
     if (!video?.videoId || !/^[\w-]{11}$/.test(video.videoId)) return;
     const wasEmpty = room.currentIndex === -1;
     const insertAt = room.currentIndex === -1 ? 0 : room.currentIndex + 1;
-    room.queue.splice(insertAt, 0, { ...video, addedBy: video.addedBy || 'Guest', volume: video.volume ?? defaultVol() });
+    const catalogEntry2 = loadSongsDb().find(s => s.ytId === video.videoId);
+    const lyricsExtra2 = {};
+    if (catalogEntry2?.lyricsEnabled === false) lyricsExtra2.lyricsEnabled = false;
+    if (catalogEntry2?.lyricsOffset) lyricsExtra2.lyricsOffset = catalogEntry2.lyricsOffset;
+    room.queue.splice(insertAt, 0, { ...video, addedBy: video.addedBy || 'Guest', volume: video.volume ?? defaultVol(), ...lyricsExtra2 });
     if (room.currentIndex === -1) room.currentIndex = 0;
     emitRoomState(room);
     if (wasEmpty) emitPlay(room, room.queue[room.currentIndex]);
@@ -743,6 +809,57 @@ io.on('connection', socket => {
   socket.on('toggle-shuffle', () => {
     room.shuffleMode = !room.shuffleMode;
     emitRoomState(room);
+  });
+
+  socket.on('toggle-lyrics', () => {
+    const song = room.queue[room.currentIndex];
+    if (!song) return;
+    song.lyricsEnabled = song.lyricsEnabled === false ? true : false;
+    emitRoomState(room);
+    // save preference to catalog
+    const db = loadSongsDb();
+    const entry = db.find(s => s.ytId === song.videoId);
+    if (entry) { entry.lyricsEnabled = song.lyricsEnabled; saveSongsDb(db); }
+  });
+
+  socket.on('lyrics-offset', ({ idx, delta }) => {
+    const i = (idx != null && idx >= 0) ? idx : room.currentIndex;
+    if (i < 0 || i >= room.queue.length) return;
+    room.queue[i].lyricsOffset = Math.round(((room.queue[i].lyricsOffset || 0) + delta) * 10) / 10;
+    emitRoomState(room);
+    // save offset to catalog
+    const db = loadSongsDb();
+    const entry = db.find(s => s.ytId === room.queue[i].videoId);
+    if (entry) { entry.lyricsOffset = room.queue[i].lyricsOffset; saveSongsDb(db); }
+  });
+
+  socket.on('global-lyrics-offset', ({ delta }) => {
+    room.globalLyricsOffset = Math.round(((room.globalLyricsOffset || 0) + delta) * 10) / 10;
+    io.to(room.id).emit('global-lyrics-offset', room.globalLyricsOffset);
+  });
+
+  socket.on('edit-lyrics', ({ videoId, lrc }) => {
+    if (!videoId || !/^[\w-]{11}$/.test(videoId)) return;
+    const cache = loadLyricsCache();
+    cache[videoId] = lrc || null;
+    saveLyricsCache(cache);
+    io.to(room.id).emit('lyrics-updated', { videoId, lrc: lrc || null });
+  });
+
+  socket.on('refresh-lyrics', async ({ videoId, title }) => {
+    if (!videoId || !/^[\w-]{11}$/.test(videoId)) return;
+    const cache = loadLyricsCache();
+    delete cache[videoId];
+    saveLyricsCache(cache);
+    socket.emit('lyrics-refreshing', { videoId });
+    try {
+      const lrc = await fetchNeteaseLyrics(title || '');
+      cache[videoId] = lrc || null;
+      saveLyricsCache(cache);
+      io.to(room.id).emit('lyrics-updated', { videoId, lrc: lrc || null });
+    } catch (e) {
+      io.to(room.id).emit('lyrics-updated', { videoId, lrc: null });
+    }
   });
 });
 
